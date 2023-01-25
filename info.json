@@ -1,0 +1,9 @@
+{
+	"name": "StableFoundations",
+	"title": "Stable Foundations",
+	"description": "Buildings and structures now have improved damage resistance when built over stone and concrete tiles. Also fully configurable with vehicles, robots and players.",
+	"author": "Dummiez",
+	"version": "1.0.0",
+	"factorio_version": "1.1",
+	"dependencies": ["base >= 1.1.0"]
+}
