@@ -61,23 +61,27 @@ end
 
 -- Displaying text reinforce if enabled
 
-local function getMatchingBuilding(player, entityBuilding, tileType)
+local function getMatchingBuilding(entityUser, entityBuilding, tileType)
 	local checkMatch = canReinforceBuilding(entityBuilding)
 	local entityUID = tostring(entityBuilding.unit_number)
-	if (checkMatch and entityBuilding.force == player.force and SF_TILES) then
+	if (checkMatch and entityBuilding.force == entityUser.force and SF_TILES) then
 		for tileName, tileRate in pairs(SF_TILES) do
 			if tileType.name:find(tileName) then
-				if settings.startup["sf-reinforce-popup-toggle"].value then
-					local caption = {"", entityBuilding.localised_name == nil and "entity-name."..entityBuilding.name or entityBuilding.localised_name, 
-					" reinforced with ", tileType.localised_name == nil and "entity-name."..tileType.name or tileType.localised_name, " ("..tileRate.percent.value.."%)"} 
-					player.create_local_flying_text{
-						text = caption,
-						position = entityBuilding.position,
-						create_at_cursor = false,
-						speed = SF_TEXT_SPEED,
-						time_to_live = SF_TIME_TO_LIVE,
-						color = SF_TEXT_COLOR,
-					}
+				if settings.startup["sf-reinforce-popup-toggle"].value and entityUser.force then --and game.players[entityUser.name] ~= nil then
+					for _, player in pairs(entityUser.force.players) do
+						if player and player.character and entityBuilding.last_user then
+							local caption = {"", entityBuilding.localised_name == nil and "entity-name."..entityBuilding.name or entityBuilding.localised_name, 
+							" reinforced with ", tileType.localised_name == nil and "entity-name."..tileType.name or tileType.localised_name, " ("..tileRate.percent.value.."%)"} 
+							player.create_local_flying_text{
+								text = caption,
+								position = entityBuilding.position,
+								create_at_cursor = false,
+								speed = SF_TEXT_SPEED,
+								time_to_live = SF_TIME_TO_LIVE,
+								color = SF_TEXT_COLOR,
+							}
+						end
+					end
 				end
 				if (entityBuilding.health > 0 and entityBuilding.health ~= entityBuilding.prototype.max_health) then
 					global.sfEntityID[entityUID] = entityBuilding.health
@@ -91,14 +95,14 @@ end
 
 -- Check to see if structure or entity can be reinforced after placing tile
 
-local entityStructureReinforced = function(player, tileList, tileType)
-	local mainSurface = player.surface or nil --game.surfaces[SURFACE_NAME] or nil
-	if not player or not mainSurface then return end
+local entityStructureReinforced = function(entityUser, tileList, tileType)
+	local mainSurface = entityUser.surface or nil --game.surfaces[SURFACE_NAME] or nil
+	if not entityUser or not mainSurface then return end
 	local caption = {"", tileType.localised_name == nil and "entity-name."..tileType.name or tileType.localised_name, " - "..tileType.name} 
 	if tileList == nil then
 		local entityBuilding = tileType
 		tileType = mainSurface.get_tile({math.floor(tileType.position.x), math.floor(tileType.position.y)}).prototype
-		getMatchingBuilding(player, entityBuilding, tileType)
+		getMatchingBuilding(entityUser, entityBuilding, tileType)
 	else
 	for _, eventTile in pairs(tileList) do
 		local findEntityArea = {{eventTile.position.x - 1, eventTile.position.y - 1}, {eventTile.position.x + 1, eventTile.position.y + 1}}
@@ -107,7 +111,7 @@ local entityStructureReinforced = function(player, tileList, tileType)
 			local tilePosition = math.floor(eventTile.position.x)..","..math.floor(eventTile.position.y)
 			local buildPosition = math.floor(entityBuilding.position.x)..","..math.floor(entityBuilding.position.y)
 			if (tilePosition == buildPosition) then
-				getMatchingBuilding(player, entityBuilding, tileType)
+				getMatchingBuilding(entityUser, entityBuilding, tileType)
 				break
 			end
 		end
@@ -217,8 +221,7 @@ script.on_event(
 )
 
 script.on_event(
-	{defines.events.on_robot_built_entity,
-	defines.events.on_robot_built_tile},
+	{defines.events.on_robot_built_tile},
 	function(event)
 		entityStructureReinforced(event.robot, event.tiles, event.tile)
 	end
@@ -228,6 +231,13 @@ script.on_event(
 	{defines.events.on_built_entity},
 	function(event)
 		entityStructureReinforced(game.players[event.player_index], nil, event.created_entity)
+	end
+)
+
+script.on_event(
+	{defines.events.on_robot_built_entity},
+	function(event)
+		entityStructureReinforced(event.robot, nil, event.created_entity)
 	end
 )
 

@@ -1,5 +1,21 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.0.3
+Date: 26. 01. 2023
+  Minor Features:
+    - Reinforced text popup now displays to all players on the same force if enabled.
+    - Bots placing structures on tiles will now properly display reinforced text popup.
+---------------------------------------------------------------------------------------------------
+Version: 1.0.2
+Date: 25. 01. 2023
+  Bugfixes:
+    - Unresolved bug fix from 1.0.1.
+---------------------------------------------------------------------------------------------------
+Version: 1.0.1
+Date: 25. 01. 2023
+  Bugfixes:
+    - Fixed an issue with mod error on robot placed tiles/entities.
+---------------------------------------------------------------------------------------------------
 Version: 1.0.0
-Date: 25.01.2023
-  Changes:
-    - Released
+Date: 25. 01. 2023
+  Major Features:
+    - Initial release.
