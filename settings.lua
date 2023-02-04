@@ -42,7 +42,27 @@ data:extend {
 		default_value = false,
 		order = "ae"
 	},
-
+	{
+		type = "bool-setting",
+		name = "sf-invulnerable-poles-toggle",
+		setting_type = "startup",
+		default_value = false,
+		order = "af"
+	},
+	{
+		type = "bool-setting",
+		name = "sf-invulnerable-rails-toggle",
+		setting_type = "startup",
+		default_value = false,
+		order = "ag"
+	},
+	{
+		type = "bool-setting",
+		name = "sf-invulnerable-lamps-toggle",
+		setting_type = "startup",
+		default_value = false,
+		order = "ah"
+	},
 	-- percent settings
 	{
 		type = "int-setting",
@@ -51,7 +71,7 @@ data:extend {
 		default_value = 100,
 		minimum_value = 0,
 		maximum_value = 200,
-		order = "aea"
+		order = "ba"
 	},
 	{
 		type = "int-setting",
@@ -60,7 +80,7 @@ data:extend {
 		default_value = 100,
 		minimum_value = 0,
 		maximum_value = 200,
-		order = "aeb"
+		order = "bb"
 	},
 	{
 		type = "int-setting",
@@ -69,7 +89,7 @@ data:extend {
 		default_value = 100,
 		minimum_value = 0,
 		maximum_value = 200,
-		order = "aec"
+		order = "bc"
 	},
 	{
 		type = "int-setting",
@@ -78,7 +98,7 @@ data:extend {
 		default_value = 40,
 		minimum_value = 0,
 		maximum_value = 100,
-		order = "ba"
+		order = "ca"
 	},
 	{
 		type = "int-setting",
@@ -87,7 +107,7 @@ data:extend {
 		default_value = 10,
 		minimum_value = 0,
 		maximum_value = 999,
-		order = "bab"
+		order = "cb"
 	},
 	{
 		type = "int-setting",
@@ -96,7 +116,7 @@ data:extend {
 		default_value = 30,
 		minimum_value = 0,
 		maximum_value = 100,
-		order = "bb"
+		order = "cc"
 	},
 	{
 		type = "int-setting",
@@ -105,7 +125,7 @@ data:extend {
 		default_value = 5,
 		minimum_value = 0,
 		maximum_value = 999,
-		order = "bba"
+		order = "cd"
 	},
 	{
 		type = "int-setting",
@@ -114,7 +134,7 @@ data:extend {
 		default_value = 20,
 		minimum_value = 0,
 		maximum_value = 100,
-		order = "bc"
+		order = "ce"
 	},
 	{
 		type = "int-setting",
@@ -123,7 +143,7 @@ data:extend {
 		default_value = 2,
 		minimum_value = 0,
 		maximum_value = 999,
-		order = "bca"
+		order = "cf"
 	},
 	{
 		type = "int-setting",
@@ -132,6 +152,6 @@ data:extend {
 		default_value = 6,
 		minimum_value = 1,
 		maximum_value = 120,
-		order = "bcb"
+		order = "da"
 	}
   }

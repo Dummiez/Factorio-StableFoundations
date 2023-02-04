@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.0.4
+Date: 04. 02. 2023
+  Features:
+    - The following structures can now be toggled invulnerable while on a foundation in startup settings: Big poles, rails and signals, lamps and lighting.
+    - More support for various mods that add tiles.
+  Other:
+    - Fixed an issue where certain structures may be incorrectly tagged (mostly modded entities).
+    - Minor performance improvements.
+---------------------------------------------------------------------------------------------------
 Version: 1.0.3
 Date: 26. 01. 2023
   Minor Features:

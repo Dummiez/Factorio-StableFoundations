@@ -10,14 +10,16 @@ local SF_TIME_TO_LIVE = 30
 local SF_TEXT_COLOR = {r = 0.5, g = 0.8, b = 0.5, a = 0.8}
 
 local SF_TILES = {
-		["reinforced"] = {percent = settings.startup["sf-refined-reduction-percent"], flat = settings.startup["sf-refined-reduction-flat"]}, --KR2
+		["reinforced"] = {percent = settings.startup["sf-refined-reduction-percent"], flat = settings.startup["sf-refined-reduction-flat"]}, -- KR2
 		["refined"] = {percent = settings.startup["sf-refined-reduction-percent"], flat = settings.startup["sf-refined-reduction-flat"]},
 
 		["concrete"] = {percent = settings.startup["sf-concrete-reduction-percent"], flat = settings.startup["sf-concrete-reduction-flat"]},
-		["tarmac"] = {percent = settings.startup["sf-concrete-reduction-percent"], flat = settings.startup["sf-concrete-reduction-flat"]}, --IR3
-		["asphalt"] = {percent = settings.startup["sf-concrete-reduction-percent"], flat = settings.startup["sf-concrete-reduction-flat"]}, --Roads
+		["tarmac"] = {percent = settings.startup["sf-concrete-reduction-percent"], flat = settings.startup["sf-concrete-reduction-flat"]}, -- IR3
+		["asphalt"] = {percent = settings.startup["sf-concrete-reduction-percent"], flat = settings.startup["sf-concrete-reduction-flat"]}, -- Roads
 
 		["stone"] = {percent = settings.startup["sf-stone-reduction-percent"], flat = settings.startup["sf-stone-reduction-flat"]},
+		["gravel"] = {percent = settings.startup["sf-stone-reduction-percent"], flat = settings.startup["sf-stone-reduction-flat"]}, -- Dectorio
+		["wood"] = {percent = settings.startup["sf-stone-reduction-percent"], flat = settings.startup["sf-stone-reduction-flat"]},
 	}
 
 function initGlobalProperties()
@@ -30,13 +32,35 @@ local function clearGlobalIndex(entityUID)
 	global.sfEntityDS[tostring(entityUID)] = nil
 end
 
+-- Match whole word only
+
+local function stringMatch(inStr, inMatch)
+	return string.find(inStr, "%f[%a]" ..inMatch.. "%f[%A]")
+end
+
+-- Check if settings for certain structures are toggled
+
+local function toggleInvulnerabilities(entityBuilding, toggleValue)
+	if (settings.startup["sf-invulnerable-rails-toggle"].value and 
+		(stringMatch(entityBuilding.prototype.type, "rail") or stringMatch(entityBuilding.prototype.name, "rail") or stringMatch(entityBuilding.prototype.type, "signal") or stringMatch(entityBuilding.prototype.name, "signal"))) 
+		or (settings.startup["sf-invulnerable-poles-toggle"].value and 
+			(stringMatch(entityBuilding.prototype.name, "big") and stringMatch(entityBuilding.prototype.name, "pole")))
+		or (settings.startup["sf-invulnerable-lamps-toggle"].value and 
+		 	(stringMatch(entityBuilding.prototype.name, "lamp") and entityBuilding.prototype.max_energy_usage > 2)) then
+		entityBuilding.destructible = toggleValue
+		entityBuilding.health = not toggleValue and entityBuilding.prototype.max_health or entityBuilding.health
+		return true
+	end
+	return false
+end
+
 -- Check settings if target entity can be reinforced
 
 local function canReinforceBuilding(entityBuilding)
 	if (entityBuilding.valid and entityBuilding.minable and entityBuilding.destructible and entityBuilding.unit_number and entityBuilding.prototype.max_health > 0) then
 		local isPlayer = entityBuilding.prototype.type == "character" or nil
 		local isBuilding = entityBuilding.prototype.is_building
-		local isWallEntity = (entityBuilding.prototype.type:find("wall") or entityBuilding.prototype.name:find("wall") or entityBuilding.prototype.type:find("gate") or entityBuilding.prototype.name:find("gate"))
+		local isWallEntity = (stringMatch(entityBuilding.prototype.type, "wall") or stringMatch(entityBuilding.prototype.name, "wall") or stringMatch(entityBuilding.prototype.type, "gate") or stringMatch(entityBuilding.prototype.name, "wall"))
 		local isWallEnabled = settings.startup["sf-reinforce-wall-toggle"].value
 		local isUnitsEnabled = settings.startup["sf-reinforce-units-toggle"].value
 		local isPlayersEnabled = settings.startup["sf-reinforce-players-toggle"].value
@@ -66,12 +90,15 @@ local function getMatchingBuilding(entityUser, entityBuilding, tileType)
 	local entityUID = tostring(entityBuilding.unit_number)
 	if (checkMatch and entityBuilding.force == entityUser.force and SF_TILES) then
 		for tileName, tileRate in pairs(SF_TILES) do
-			if tileType.name:find(tileName) then
+			if tileType ~= nil and stringMatch(tileType.name, tileName) then
+				local invCaption = toggleInvulnerabilities(entityBuilding, false)
+				local caption = not invCaption and ({"", entityBuilding.localised_name == nil and "entity-name."..entityBuilding.name or entityBuilding.localised_name, 
+				" reinforced with ", tileType.localised_name == nil and "entity-name."..tileType.name or tileType.localised_name, " ("..tileRate.percent.value.."%)"})
+				or ({"", entityBuilding.localised_name == nil and "entity-name."..entityBuilding.name or entityBuilding.localised_name, 
+				" reinforced. "})
 				if settings.startup["sf-reinforce-popup-toggle"].value and entityUser.force then --and game.players[entityUser.name] ~= nil then
 					for _, player in pairs(entityUser.force.players) do
 						if player and player.character and entityBuilding.last_user then
-							local caption = {"", entityBuilding.localised_name == nil and "entity-name."..entityBuilding.name or entityBuilding.localised_name, 
-							" reinforced with ", tileType.localised_name == nil and "entity-name."..tileType.name or tileType.localised_name, " ("..tileRate.percent.value.."%)"} 
 							player.create_local_flying_text{
 								text = caption,
 								position = entityBuilding.position,
@@ -87,9 +114,11 @@ local function getMatchingBuilding(entityUser, entityBuilding, tileType)
 					global.sfEntityID[entityUID] = entityBuilding.health
 					global.sfEntityDS[entityUID] = entityBuilding
 				end
-				break
+				break				
 			end
 		end
+	elseif entityBuilding and entityBuilding.valid and entityBuilding.force == entityUser.force then
+		toggleInvulnerabilities(entityBuilding, true)
 	end
 end
 
@@ -98,7 +127,7 @@ end
 local entityStructureReinforced = function(entityUser, tileList, tileType)
 	local mainSurface = entityUser.surface or nil --game.surfaces[SURFACE_NAME] or nil
 	if not entityUser or not mainSurface then return end
-	local caption = {"", tileType.localised_name == nil and "entity-name."..tileType.name or tileType.localised_name, " - "..tileType.name} 
+	--local caption = {"", tileType.localised_name == nil and "entity-name."..tileType.name or tileType.localised_name, " - "..tileType.name} 
 	if tileList == nil then
 		local entityBuilding = tileType
 		tileType = mainSurface.get_tile({math.floor(tileType.position.x), math.floor(tileType.position.y)}).prototype
@@ -135,32 +164,35 @@ local entityStructureDamaged = function(entityBuilding, attackingEntity, attacki
 			local tileReduceFlat = 0
 			local effectReduce = 1
 			for tileName, tileRate in pairs(SF_TILES) do
-				if buildTileType.name:find(tileName) then
+				if stringMatch(buildTileType.name, tileName) then
 					tileReducePercent = tileRate.percent.value
 					tileReduceFlat = tileRate.flat.value
 					foundTile = true
 					break
 				end
 			end
-			if foundTile then
-				if (attackingForce == entityBuilding.force) and attackingEntity then
-				 	if not settings.startup["sf-friendly-reduction-toggle"].value and attackingForce == entityBuilding.force then
-				 		tileReduceFlat = 0
-				 		tileReducePercent = 0
-				 	end
-				 	if (damageType == "explosion" or damageType == "impact" or damageType == "physical") then
-				 		effectReduce = (settings.startup["sf-friendly-"..damageType.."-reduction"].value / 100)
-				 	end
-				end
-				finalFlatDamage = (finalDamage - tileReduceFlat) > 0 and (finalDamage - tileReduceFlat) or 1 / (tileReduceFlat - finalDamage + 2)
-				local mitigatedDamage = (finalFlatDamage * effectReduce) * (1 - (tileReducePercent / 100)) 
-				if global.sfEntityID[entityUID] == nil then
-					global.sfEntityID[entityUID] = entityBuilding.prototype.max_health --{hp = entityBuilding.prototype.max_health, max = entityBuilding.prototype.max_health}
-				end
-				entityBuilding.health = (finalDamage < entityBuilding.health) and (finalHealth + finalDamage) - mitigatedDamage or (global.sfEntityID[entityUID] - mitigatedDamage)
-				global.sfEntityID[entityUID] = entityBuilding.health -- = {hp = entityBuilding.health, max = entityMaxHealth}
-				if entityBuilding.health > 0 and entityBuilding.health ~= entityBuilding.prototype.max_health then
-					global.sfEntityDS[entityUID] = entityBuilding
+			if foundTile and entityBuilding.destructible then
+				toggleInvulnerabilities(entityBuilding, false)
+				if entityBuilding.destructible then
+					if (attackingForce == entityBuilding.force) and attackingEntity then
+					 	if not settings.startup["sf-friendly-reduction-toggle"].value and attackingForce == entityBuilding.force then
+					 		tileReduceFlat = 0
+					 		tileReducePercent = 0
+					 	end
+					 	if (damageType == "explosion" or damageType == "impact" or damageType == "physical") then
+					 		effectReduce = (settings.startup["sf-friendly-"..damageType.."-reduction"].value / 100)
+					 	end
+					end
+					finalFlatDamage = (finalDamage - tileReduceFlat) > 0 and (finalDamage - tileReduceFlat) or 1 / (tileReduceFlat - finalDamage + 2)
+					local mitigatedDamage = (finalFlatDamage * effectReduce) * (1 - (tileReducePercent / 100)) 
+					if global.sfEntityID[entityUID] == nil then
+						global.sfEntityID[entityUID] = entityBuilding.prototype.max_health --{hp = entityBuilding.prototype.max_health, max = entityBuilding.prototype.max_health}
+					end
+					entityBuilding.health = (finalDamage < entityBuilding.health) and (finalHealth + finalDamage) - mitigatedDamage or (global.sfEntityID[entityUID] - mitigatedDamage)
+					global.sfEntityID[entityUID] = entityBuilding.health -- = {hp = entityBuilding.health, max = entityMaxHealth}
+					if entityBuilding.health > 0 and entityBuilding.health ~= entityBuilding.prototype.max_health then
+						global.sfEntityDS[entityUID] = entityBuilding
+					end
 				end
 			end
 		end
@@ -224,6 +256,20 @@ script.on_event(
 	{defines.events.on_robot_built_tile},
 	function(event)
 		entityStructureReinforced(event.robot, event.tiles, event.tile)
+	end
+)
+
+script.on_event(
+	{defines.events.on_player_mined_tile},
+	function(event)
+		entityStructureReinforced(game.players[event.player_index], event.tiles, nil)
+	end
+)
+
+script.on_event(
+	{defines.events.on_robot_mined_tile},
+	function(event)
+		entityStructureReinforced(event.robot, event.tiles, nil)
 	end
 )
 
