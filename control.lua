@@ -27,16 +27,19 @@ end
 
 -- Initialize global lists
 local function initGlobalProperties()
-	global.sfEntities = global.sfEntities or {}
+	global.sfEntity = global.sfEntity or {}
+	global.sfHealth = global.sfHealth or {}
 	global.reinforcedChunks = global.reinforcedChunks or {}
-	global.bonus_beacons = global.bonus_beacons or {}
-	--toggleFoundationBonuses()
+	global.bonusBeacons = global.bonusBeacons or {}
 end
 
 -- Remove entity from global list
 local function clearEntityTracking(entityUID)
-	if global.sfEntities then
-		global.sfEntities[entityUID] = nil
+	if global.sfEntity then
+		global.sfEntity[entityUID] = nil
+	end
+	if global.sfHealth then
+		global.sfHealth[entityUID] = nil
 	end
 end
 
@@ -61,11 +64,10 @@ end
 -- Clear all modules on a specific reinforced tile
 local function removeAllModules(entity)
 	local module_inventory = entity.get_module_inventory()
-	if module_inventory and not module_inventory.is_empty() then
-		for i = 1, #module_inventory do
-			if module_inventory[i].valid_for_read then
-				module_inventory[i].clear()
-			end
+	if module_inventory and not module_inventory.is_empty() then else return end
+	for i = 1, #module_inventory do
+		if module_inventory[i].valid_for_read then
+			module_inventory[i].clear()
 		end
 	end
 end
@@ -73,12 +75,12 @@ end
 -- Function to remove bonuses from a structure
 local function removeBuildingBonus(entity)
 	if not entity.valid then return end
-	if global.bonus_beacons and global.bonus_beacons[entity.unit_number] then
-		local beacon = global.bonus_beacons[entity.unit_number]
+	if global.bonusBeacons and global.bonusBeacons[entity.unit_number] then
+		local beacon = global.bonusBeacons[entity.unit_number]
 		if beacon and beacon.valid then
 			beacon.destroy()
 		end
-		global.bonus_beacons[entity.unit_number] = nil
+		global.bonusBeacons[entity.unit_number] = nil
 	else -- Hard remove in case no beacons were found
 		local hidden_beacons = entity.surface.find_entities_filtered { name = "sf-tile-bonus", position = entity.position, radius = 1 }
 		if hidden_beacons and #hidden_beacons > 0 then
@@ -111,7 +113,7 @@ local function applyBuildingBonus(surface, entity, tileType)
 		beacon.minable = false
 		beacon.operable = false
 		beacon.get_module_inventory().insert({ name = "sf-tile-module-" .. bonus.tier, count = 1 })
-		global.bonus_beacons[entity.unit_number] = beacon
+		global.bonusBeacons[entity.unit_number] = beacon
 	elseif beacon and bonus.tier then
 		removeAllModules(beacon) --beacon.get_module_inventory().remove({ name = "sf-tile-module-".. })
 		beacon.get_module_inventory().insert({ name = "sf-tile-module-" .. bonus.tier, count = 1 })
@@ -123,14 +125,12 @@ local function toggleInvulnerabilities(entityBuilding, toggleValue)
 	if not entityBuilding or not entityBuilding.valid then return false end
 	local entityName = entityBuilding.name
 	local entityType = entityBuilding.type
-	if instanceCache[entityName] ~= nil then
-		goto apply_toggle
-	end
+	if instanceCache[entityName] ~= nil then goto apply_toggle end
 	if (SETTING.SafeRails and (entityType == "rail" or entityName:find("rail") or entityType == "rail-signal" or entityType == "rail-chain-signal"))
 		or (SETTING.SafePoles and (entityName:find("big") and entityName:find("pole")))
 		or (SETTING.SafeLights and (entityName:find("lamp") and entityBuilding.prototype.max_energy_usage > 2)) then
 		instanceCache[entityName] = entityType
-	else
+	else 
 		return false
 	end
 	::apply_toggle::
@@ -174,76 +174,69 @@ local function isChunkReinforced(surface, position)
 		global.reinforcedChunks[surface.index][chunkPos.x .. "," .. chunkPos.y] or false
 end
 
+local function showPopupText(entityUser, entityBuilding, caption)
+	if SETTING.ReinforcePopupToggle and entityUser.force and entityUser.force.players then else return end
+	for _, player in pairs(entityUser.force.players) do
+		if player and player.valid and player.character and entityBuilding.last_user then
+			player.create_local_flying_text {
+				text = caption,
+				position = entityBuilding.position,
+				create_at_cursor = false,
+				speed = SF_TEXT_SPEED,
+				time_to_live = SF_TIME_TO_LIVE,
+				color = SF_TEXT_COLOR,
+			}
+		end
+	end
+end
+
 -- Check if structure matches checks, also display popup text
 local function getMatchingBuilding(entityUser, entityBuilding, tileType)
 	if not entityUser or not entityBuilding or not entityBuilding.valid or not tileType then return end
-	if not (canReinforceBuilding(entityBuilding) and entityBuilding.force == entityUser.force) then return end
-
+	if not (canReinforceBuilding(entityBuilding) and entityBuilding.force == entityUser.force) then return end -- todo: needs work
 	local tileRate = getTileReinforcement(tileType.name)
 	if not tileRate then return end
-
-	local invCaption = toggleInvulnerabilities(entityBuilding, false)
-	local caption = not invCaption and
-		{ "", entityBuilding.localised_name or ("entity-name." .. entityBuilding.name),
-			" reinforced with ", tileType.localised_name or ("entity-name." .. tileType.name),
-			" (" .. tileRate.percent .. "%)" } or
-		{ "", entityBuilding.localised_name or ("entity-name." .. entityBuilding.name),
-			" reinforced. " }
-
-	if SETTING.ReinforcePopupToggle and entityUser.force and entityUser.force.players then
-		for _, player in pairs(entityUser.force.players) do
-			if player and player.valid and player.character and entityBuilding.last_user then
-				player.create_local_flying_text {
-					text = caption,
-					position = entityBuilding.position,
-					create_at_cursor = false,
-					speed = SF_TEXT_SPEED,
-					time_to_live = SF_TIME_TO_LIVE,
-					color = SF_TEXT_COLOR,
-				}
-			end
-		end
-	end
-
 	if entityBuilding.health > 0 and entityBuilding.health ~= entityBuilding.prototype.max_health then
-		local entityData = {
-			health = entityBuilding.health,
-			max = entityBuilding.prototype.max_health,
-			valid =
-				entityBuilding.valid
-		}
-		global.sfEntities[entityBuilding.unit_number] = entityData
+		global.sfHealth[entityBuilding.unit_number] = entityBuilding.health
+		global.sfEntity[entityBuilding.unit_number] = entityBuilding
 		--setmetatable({ entity = entityBuilding }, entityMetatable)
 	end
-
 	markChunkReinforced(entityBuilding.surface, entityBuilding.position)
+	local invCaption = toggleInvulnerabilities(entityBuilding, false)
+	showPopupText(entityUser, entityBuilding, not invCaption and
+	{ "", entityBuilding.localised_name or ("entity-name." .. entityBuilding.name),
+		" reinforced with ", tileType.localised_name or ("entity-name." .. tileType.name),
+		" (" .. tileRate.percent .. "%)" } or
+	{ "", entityBuilding.localised_name or ("entity-name." .. entityBuilding.name),
+		" reinforced. " })
 end
 
 -- Check if structure is reinforced and apply appropriate changes
 local function entityStructureReinforced(entityUser, tileList, tileType)
 	if not entityUser or not entityUser.surface then return end
 	local mainSurface = entityUser.surface
+
 	if tileList == nil then
 		local entityBuilding = tileType
 		tileType = mainSurface.get_tile({ math.floor(tileType.position.x), math.floor(tileType.position.y) }).prototype
 		getMatchingBuilding(entityUser, entityBuilding, tileType)
 		applyBuildingBonus(mainSurface, entityBuilding, tileType)
-	else
-		for _, eventTile in pairs(tileList) do
-			local findEntityArea = { { eventTile.position.x - 1, eventTile.position.y - 1 }, { eventTile.position.x + 1, eventTile.position.y + 1 } }
-			local areaBuilding = mainSurface.find_entities(findEntityArea)
-			local eventTileX = math.floor(eventTile.position.x)
-			local eventTileY = math.floor(eventTile.position.y)
+		return
+	end
+	for _, eventTile in pairs(tileList) do
+		local findEntityArea = { { eventTile.position.x - 1, eventTile.position.y - 1 }, { eventTile.position.x + 1, eventTile.position.y + 1 } }
+		local areaBuilding = mainSurface.find_entities(findEntityArea)
+		local eventTileX = math.floor(eventTile.position.x)
+		local eventTileY = math.floor(eventTile.position.y)
 
-			for _, entityBuilding in pairs(areaBuilding) do
-				local buildPositionX = math.floor(entityBuilding.position.x)
-				local buildPositionY = math.floor(entityBuilding.position.y)
+		for _, entityBuilding in pairs(areaBuilding) do
+			local buildPositionX = math.floor(entityBuilding.position.x)
+			local buildPositionY = math.floor(entityBuilding.position.y)
 
-				if (eventTileX == buildPositionX) and (eventTileY == buildPositionY) then
-					getMatchingBuilding(entityUser, entityBuilding, tileType)
-					applyBuildingBonus(mainSurface, entityBuilding, tileType)
-					break
-				end
+			if (eventTileX == buildPositionX) and (eventTileY == buildPositionY) then
+				getMatchingBuilding(entityUser, entityBuilding, tileType)
+				applyBuildingBonus(mainSurface, entityBuilding, tileType)
+				break
 			end
 		end
 	end
@@ -280,44 +273,27 @@ local function entityStructureDamaged(entityBuilding, attackingEntity, attacking
 			or damageType == "impact" and SETTING.FriendlyImpactDamage / 100
 			or damageType == "physical" and SETTING.FriendlyPhysicalDamage / 100 or effectReduce)
 	end
-
 	local finalFlatDamage = (finalDamage - tileReduceFlat) > 0 and (finalDamage - tileReduceFlat) or
 		1 / (tileReduceFlat - finalDamage + 2)
 	local mitigatedDamage = (finalFlatDamage * effectReduce) * (1 - (tileReducePercent / 100))
-
-	local entityData = global.sfEntities[entityUID]
-
+	local entityData = global.sfEntity[entityUID]
 	if not entityData then -- Unlogged entity, index it
-		--entityData = setmetatable({ entity = entityBuilding }, entityMetatable)
-		entityData = {
-			health = entityBuilding.prototype.max_health,
-			max = entityBuilding.prototype.max_health,
-			valid =
-				entityBuilding.valid
-		}
-		global.sfEntities[entityUID] = entityData
+		global.sfHealth[entityBuilding.unit_number] = entityBuilding.prototype.max_health
+		global.sfEntity[entityBuilding.unit_number] = entityBuilding
 	end
-	local updatedHealth = (finalDamage < entityBuilding.health) and (finalHealth + finalDamage) - mitigatedDamage or
-		(global.sfEntities[entityUID].health - mitigatedDamage)
-	entityBuilding.health = updatedHealth
+	local updatedHealth = (finalDamage < entityBuilding.health) and 
+	(finalHealth + finalDamage) - mitigatedDamage or (global.sfHealth[entityUID] - mitigatedDamage)
 
-	-- game.print(serpent.block({
-	-- final_dmg = finalDamage,
-	-- entity_bld_hp = entityBuilding.health,
-	-- final_hp_dmg = finalHealth + finalDamage,
-	-- glb_entity_hp = global.sfEntities[entityUID].health,
-	-- mitigated = mitigatedDamage,
-	-- upd_hp = updatedHealth
-	-- }))
+	entityBuilding.health = updatedHealth
 
 	if entityBuilding.health > 0 and entityBuilding.health ~= entityBuilding.prototype.max_health then
 		entityData = {
 			health = entityBuilding.health,
-			max = entityBuilding.prototype.max_health,
-			valid = entityBuilding.valid
+			original = entityBuilding
 		}
 		--setmetatable({ entity = entityBuilding }, entityMetatable)
-		global.sfEntities[entityUID] = entityData
+		global.sfHealth[entityBuilding.unit_number] = entityBuilding.health
+		global.sfEntity[entityBuilding.unit_number] = entityBuilding
 	elseif updatedHealth <= 0 or updatedHealth >= entityBuilding.prototype.max_health then
 		clearEntityTracking(entityUID)
 	end
@@ -337,25 +313,24 @@ local nextEntityIndex = nil
 
 -- Iterate through global entities that are logged
 local function periodicEntityCheck()
+	if not global.sfEntity then initGlobalProperties() end 
 	local entityData
 	local count = 0
 	local currentIndex = nextEntityIndex
-
 	while count < ENTITIES_PER_TICK do
-		currentIndex, entityData = next(global.sfEntities, currentIndex)
-
+		currentIndex, entityData = next(global.sfEntity, currentIndex)
 		if not currentIndex then
 			nextEntityIndex = nil
 			break
 		end
-
-		if not entityData.valid or entityData.health == entityData.max then
-			global.sfEntities[currentIndex] = nil
-		end
-
+			if global.sfHealth[currentIndex] ~= nil and entityData.valid and entityData.minable and entityData.health ~= global.sfHealth[currentIndex] then
+				global.sfHealth[currentIndex] = entityData.health
+			end
+			if not entityData.valid or entityData.health == entityData.prototype.max_health or entityData.health == 0 then
+				clearEntityTracking(currentIndex)
+			end
 		count = count + 1
 	end
-
 	if currentIndex then
 		nextEntityIndex = currentIndex
 	end

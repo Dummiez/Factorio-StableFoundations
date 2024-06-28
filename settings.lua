@@ -101,7 +101,7 @@ data:extend {
 		setting_type = "startup",
 		default_value = 3,
 		minimum_value = 1,
-		maximum_value = 300,
+		maximum_value = 60,
 		order = "aha"
 	},
 	{

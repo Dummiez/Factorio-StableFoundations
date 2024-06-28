@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.0.6
+Date: 28. 06. 2023
+  Bugfixes:
+    - Fixed an issue with health changes for buildings on a tile. Now accounts for repairs and other non-damaging events.
+  Other:
+    - Minor adjustments to some default settings.
+---------------------------------------------------------------------------------------------------
 Version: 1.0.5
 Date: 28. 06. 2023
   Features:

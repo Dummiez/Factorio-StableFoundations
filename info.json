@@ -1,9 +1,9 @@
 {
 	"name": "StableFoundations",
 	"title": "Stable Foundations",
-	"description": "Buildings and other structures now have improved damage resistance, productivity, speed and efficiency when built over stone and concrete tiles. Can also be used to reinforce vehicles, robots and players as well as adjusting the bonus stats to your liking. Highly configurable/mod compatible.",
+	"description": "Buildings and other structures now have improved damage resistance, productivity, speed and efficiency when built over stone and concrete tiles. Can also be used to reinforce vehicles, robots and players as well as adjusting the additional foundation stats to your liking. Highly configurable/mod compatible.",
 	"author": "Dummiez",
-	"version": "1.0.5",
+	"version": "1.0.6",
 	"factorio_version": "1.1",
 	"dependencies": [
 		"base >= 1.1.0"
