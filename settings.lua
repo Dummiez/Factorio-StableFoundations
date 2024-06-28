@@ -1,11 +1,14 @@
+-- settings.lua
+-- Dummiez 2024/06/27
+
 data:extend {
 	-- toggle settings
 	{
 		type = "bool-setting",
-		name = "sf-reinforce-popup-toggle",
+		name = "sf-building-bonus-toggle",
 		setting_type = "startup",
 		default_value = true,
-		order = "aa"
+		order = "aaa"
 	},
 	{
 		type = "bool-setting",
@@ -13,6 +16,13 @@ data:extend {
 		setting_type = "startup",
 		default_value = true,
 		order = "aab"
+	},
+	{
+		type = "bool-setting",
+		name = "sf-reinforce-popup-toggle",
+		setting_type = "startup",
+		default_value = true,
+		order = "aac"
 	},
 	{
 		type = "bool-setting",
@@ -63,7 +73,67 @@ data:extend {
 		default_value = false,
 		order = "ah"
 	},
+	-- {
+	-- 	type = "bool-setting",
+	-- 	name = "sf-production-bonus-toggle",
+	-- 	setting_type = "startup",
+	-- 	default_value = false,
+	-- 	order = "ai"
+	-- },
+	-- {
+	-- 	type = "bool-setting",
+	-- 	name = "sf-efficiency-bonus-toggle",
+	-- 	setting_type = "startup",
+	-- 	default_value = false,
+	-- 	order = "aj"
+	-- },
+	-- {
+	-- 	type = "bool-setting",
+	-- 	name = "sf-speed-bonus-toggle",
+	-- 	setting_type = "startup",
+	-- 	default_value = false,
+	-- 	order = "ak"
+	-- },
 	-- percent settings
+	{
+		type = "int-setting",
+		name = "sf-entity-refresh",
+		setting_type = "startup",
+		default_value = 3,
+		minimum_value = 1,
+		maximum_value = 300,
+		order = "aha"
+	},
+	{
+		type = "int-setting",
+		name = "sf-entity-tick-count",
+		setting_type = "startup",
+		default_value = 200,
+		minimum_value = 100,
+		maximum_value = 10000,
+		order = "ahb"
+	},
+	{
+		type = "string-setting",
+		name = "sf-production-list",
+		setting_type = "startup",
+		default_value = "5, 3, 2",
+		order = "al"
+	},
+	{
+		type = "string-setting",
+		name = "sf-speed-list",
+		setting_type = "startup",
+		default_value = "10, 7, 4",
+		order = "am"
+	},
+	{
+		type = "string-setting",
+		name = "sf-efficiency-list",
+		setting_type = "startup",
+		default_value = "15, 10, 5",
+		order = "an"
+	},
 	{
 		type = "int-setting",
 		name = "sf-friendly-physical-reduction",
@@ -106,8 +176,8 @@ data:extend {
 		setting_type = "startup",
 		default_value = 10,
 		minimum_value = 0,
-		maximum_value = 999,
-		order = "cb"
+		maximum_value = 1000,
+		order = "cd"
 	},
 	{
 		type = "int-setting",
@@ -116,7 +186,7 @@ data:extend {
 		default_value = 30,
 		minimum_value = 0,
 		maximum_value = 100,
-		order = "cc"
+		order = "cb"
 	},
 	{
 		type = "int-setting",
@@ -124,8 +194,8 @@ data:extend {
 		setting_type = "startup",
 		default_value = 5,
 		minimum_value = 0,
-		maximum_value = 999,
-		order = "cd"
+		maximum_value = 1000,
+		order = "ce"
 	},
 	{
 		type = "int-setting",
@@ -134,7 +204,7 @@ data:extend {
 		default_value = 20,
 		minimum_value = 0,
 		maximum_value = 100,
-		order = "ce"
+		order = "cc"
 	},
 	{
 		type = "int-setting",
@@ -142,16 +212,35 @@ data:extend {
 		setting_type = "startup",
 		default_value = 2,
 		minimum_value = 0,
-		maximum_value = 999,
+		maximum_value = 1000,
 		order = "cf"
 	},
 	{
-		type = "int-setting",
-		name = "sf-entity-refresh",
+		type = "string-setting",
+		name = "sf-list-tier3",
 		setting_type = "startup",
-		default_value = 6,
-		minimum_value = 1,
-		maximum_value = 120,
-		order = "da"
-	}
-  }
+		default_value = "refined, reinforced, spaceship",
+		order = "ea"
+	},
+	{
+		type = "string-setting",
+		name = "sf-list-tier2",
+		setting_type = "startup",
+		default_value = "concrete, tarmac, asphalt",
+		order = "eb"
+	},
+	{
+		type = "string-setting",
+		name = "sf-list-tier1",
+		setting_type = "startup",
+		default_value = "stone, gravel, wood",
+		order = "ec"
+	},
+	{
+		type = "string-setting",
+		name = "sf-list-bonus",
+		setting_type = "startup",
+		default_value = "furnace, assembling-machine, mining-drill",
+		order = "ed"
+	},
+}

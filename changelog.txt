@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.0.5
+Date: 28. 06. 2023
+  Features:
+    - Foundations can now provide most production-type structures with improved productivity, speed and efficiency. This is configurable in the mod settings.
+    - You can now configure which tiles and buildings can be utilized with the foundation bonuses in the mod settings.
+    - Added Structure/unit update refresh setting to limit how many entities can be updated for proper damage checking. This should improve performance issues for large save files.
+  Other:
+    - Internal code rewrite (more efficient tile and chunk scanning).
+---------------------------------------------------------------------------------------------------
 Version: 1.0.4
 Date: 04. 02. 2023
   Features:
