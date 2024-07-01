@@ -4,21 +4,24 @@
 require 'shared'
 
 -- Create beacon to add modifiers
-local invisible_beacon = table.deepcopy(data.raw["beacon"]["beacon"])
-invisible_beacon.name = "sf-tile-bonus"
-invisible_beacon.energy_usage = "1W"
-invisible_beacon.supply_area_distance = 0
-invisible_beacon.distribution_effectivity = 1
-invisible_beacon.graphics_set = nil
-invisible_beacon.selection_box = nil
-invisible_beacon.collision_mask = {}
-invisible_beacon.collision_box = { { -0.1, -0.1 }, { 0.1, 0.1 } }
-invisible_beacon.energy_source = { type = "void" }
-invisible_beacon.allowed_effects = { "speed", "productivity", "consumption" }
-invisible_beacon.flags = { "placeable-off-grid", "not-on-map", "not-blueprintable", "not-deconstructable",
-    "not-upgradable", "hidden", "hide-alt-info", "no-copy-paste", "no-automated-item-insertion",
-    "no-automated-item-removal", "not-repairable", "not-flammable", "not-selectable-in-game", "not-in-made-in",
-    "not-in-kill-statistics" }
+local tile_beacon = {
+    type = "beacon",
+    name = "sf-tile-bonus",
+    energy_usage = "1W",
+    supply_area_distance = 0,
+    distribution_effectivity = 1,
+    graphics_set = nil,
+    selection_box = nil,
+    collision_mask = {},
+    collision_box = { { -0.1, -0.1 }, { 0.1, 0.1 } },
+    energy_source = { type = "void" },
+    module_specification = { module_slots = 1 },
+    allowed_effects = { "speed", "productivity", "consumption" },
+    flags = { "placeable-off-grid", "not-on-map", "not-blueprintable", "not-deconstructable", 
+        "hidden", "hide-alt-info", "no-copy-paste", "no-automated-item-insertion",
+        "no-automated-item-removal", "not-repairable", "not-flammable", "not-selectable-in-game", "not-in-made-in",
+        "not-in-kill-statistics", "not-upgradable" }
+}
 
 -- Create beacon module effect
 local bonus_modules = {}
@@ -63,4 +66,4 @@ end
 
 
 data:extend(bonus_modules)
-data:extend({ invisible_beacon })
+data:extend({ tile_beacon })
