@@ -1,13 +1,36 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.1.0
+Date: 05. 07. 2024
+  Bugfixes:
+    - Fixed mod conflict with Space Exploration.
+---------------------------------------------------------------------------------------------------
+Version: 1.0.9
+Date: 03. 07. 2024
+  Bugfixes:
+    - Fixed an issue with modded buildings and foundation bonus incompatibility (if this issue persists, disable the Building foundation bonus effects).
+---------------------------------------------------------------------------------------------------
+Version: 1.0.8
+Date: 01. 07. 2024
+  Bugfixes:
+    - Fixed an issue with entity cleanup not working as intended.
+---------------------------------------------------------------------------------------------------
+Version: 1.0.7
+Date: 01. 07. 2024
+  Bugfixes:
+    - Fixed mod conflict with Bob's Modules.
+    - Fixed an issue where 1x1 assembly-type buildings would not receive foundation bonuses.
+  Other:
+    - Fixed minor issues from previous changelog.
+---------------------------------------------------------------------------------------------------
 Version: 1.0.6
-Date: 28. 06. 2023
+Date: 28. 06. 2024
   Bugfixes:
     - Fixed an issue with health changes for buildings on a tile. Now accounts for repairs and other non-damaging events.
   Other:
     - Minor adjustments to some default settings.
 ---------------------------------------------------------------------------------------------------
 Version: 1.0.5
-Date: 28. 06. 2023
+Date: 28. 06. 2024
   Features:
     - Foundations can now provide most production-type structures with improved productivity, speed and efficiency. This is configurable in the mod settings.
     - You can now configure which tiles and buildings can be utilized with the foundation bonuses in the mod settings.

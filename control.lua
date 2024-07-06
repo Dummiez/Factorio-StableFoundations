@@ -82,7 +82,7 @@ local function removeBuildingBonus(entity)
 		end
 		global.bonusBeacons[entity.unit_number] = nil
 	else -- Hard remove in case no beacons were found
-		local hidden_beacons = entity.surface.find_entities_filtered { name = "sf-tile-bonus", position = entity.position, radius = 1 }
+		local hidden_beacons = entity.surface.find_entities_filtered { name = "sf-tile-bonus", position = entity.position, radius = 0.9 }
 		if hidden_beacons and #hidden_beacons > 0 then
 			for _, beacon in pairs(hidden_beacons) do
 				beacon.destroy()
@@ -100,7 +100,7 @@ local function applyBuildingBonus(surface, entity, tileType)
 	end
 	local bonus = getTileReinforcement(tileType.name)
 	if not bonus then return end
-	local hidden_beacons = entity.surface.find_entities_filtered { name = "sf-tile-bonus", position = entity.position, radius = 1 }
+	local hidden_beacons = entity.surface.find_entities_filtered { name = "sf-tile-bonus", position = entity.position, radius = 0.9 }
 	local beacon = hidden_beacons[1]
 	-- Create ephemeral beacon to give buff to building on foundation
 	if not beacon and bonus.tier then
@@ -287,10 +287,6 @@ local function entityStructureDamaged(entityBuilding, attackingEntity, attacking
 	entityBuilding.health = updatedHealth
 
 	if entityBuilding.health > 0 and entityBuilding.health ~= entityBuilding.prototype.max_health then
-		entityData = {
-			health = entityBuilding.health,
-			original = entityBuilding
-		}
 		--setmetatable({ entity = entityBuilding }, entityMetatable)
 		global.sfHealth[entityBuilding.unit_number] = entityBuilding.health
 		global.sfEntity[entityBuilding.unit_number] = entityBuilding
@@ -313,27 +309,42 @@ local nextEntityIndex = nil
 
 -- Iterate through global entities that are logged
 local function periodicEntityCheck()
-	if not global.sfEntity then initGlobalProperties() end 
-	local entityData
-	local count = 0
-	local currentIndex = nextEntityIndex
-	while count < ENTITIES_PER_TICK do
-		currentIndex, entityData = next(global.sfEntity, currentIndex)
-		if not currentIndex then
-			nextEntityIndex = nil
-			break
-		end
-			if global.sfHealth[currentIndex] ~= nil and entityData.valid and entityData.minable and entityData.health ~= global.sfHealth[currentIndex] then
-				global.sfHealth[currentIndex] = entityData.health
-			end
-			if not entityData.valid or entityData.health == entityData.prototype.max_health or entityData.health == 0 then
-				clearEntityTracking(currentIndex)
-			end
-		count = count + 1
-	end
-	if currentIndex then
-		nextEntityIndex = currentIndex
-	end
+    if not global.sfEntity then 
+        initGlobalProperties() 
+        return
+    end
+
+    local entityData
+    local count = 0
+    local currentIndex = nextEntityIndex
+    local entitiesToRemove = {}
+
+    while count < ENTITIES_PER_TICK do
+        currentIndex, entityData = next(global.sfEntity, currentIndex)
+        if not currentIndex then
+            nextEntityIndex = nil
+            break
+        end
+
+        if global.sfHealth[currentIndex] ~= nil and entityData.valid and entityData.minable and entityData.health ~= global.sfHealth[currentIndex] then
+            global.sfHealth[currentIndex] = entityData.health
+        end
+
+        if not entityData.valid or entityData.health == entityData.prototype.max_health or entityData.health == 0 then
+            table.insert(entitiesToRemove, currentIndex)
+        end
+
+        count = count + 1
+    end
+
+    if currentIndex then
+        nextEntityIndex = currentIndex
+    end
+
+    -- Clear invalid entities after iteration
+    for _, entityUID in ipairs(entitiesToRemove) do
+        clearEntityTracking(entityUID)
+    end
 end
 
 -- Event handlers

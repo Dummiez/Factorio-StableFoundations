@@ -53,7 +53,8 @@ SETTING = {
     EntityRefreshCount = settings.startup["sf-entity-tick-count"].value,
     EntityTickRefresh = settings.startup["sf-entity-refresh"].value,
     BuildingBonusEffects = settings.startup["sf-building-bonus-toggle"].value,
-    BuildingBonusList = settings.startup["sf-list-bonus"]
+    BuildingBonusList = settings.startup["sf-list-bonus"],
+    IdentifiedList = {"default"}
 }
 
 -- Setting names

@@ -11,9 +11,10 @@ local tile_beacon = {
     supply_area_distance = 0,
     distribution_effectivity = 1,
     graphics_set = nil,
-    selection_box = nil,
-    collision_mask = {},
-    collision_box = { { -0.1, -0.1 }, { 0.1, 0.1 } },
+    selection_box = { {0, 0}, {0, 0} },
+    collision_box = { {0, 0}, {0, 0} },
+    --{ { -0.1, -0.1 }, { 0.1, 0.1 } },
+    collision_mask = { "colliding-with-tiles-only" },
     energy_source = { type = "void" },
     module_specification = { module_slots = 1 },
     allowed_effects = { "speed", "productivity", "consumption" },
@@ -25,6 +26,7 @@ local tile_beacon = {
 
 -- Create beacon module effect
 local bonus_modules = {}
+
 for index, tiletype in ipairs(SF_NAMES) do
     if tiletype then
         local new_bonus = {
@@ -53,17 +55,23 @@ end
 if SETTING.BuildingBonusEffects then
     local allowedTypes = parseTiles(SETTING.BuildingBonusList) --{ "assembling-machine", "furnace", "mining-drill" }
     local extraEffects = { "productivity", "speed", "consumption", "pollution" }
-
     -- Modify allowed effects to enable buffs
     for _, dataType in pairs(allowedTypes) do
         if data.raw[dataType] ~= nil then
-            for _, dataObject in pairs(data.raw[dataType]) do
-                dataObject.allowed_effects = extraEffects
+            for _, dataObject in pairs(data.raw[dataType]) do                 
+                --dataObject.allowed_effects = extraEffects
+                for _, effect in pairs(extraEffects) do
+                    dataObject.allowed_effects = dataObject.allowed_effects or {}
+                    -- reset any existing similar effects
+                    if dataObject.allowed_effects[effect] then
+                        table.remove(dataObject.allowed_effects, effect)
+                    end
+                    table.insert(dataObject.allowed_effects, effect)
+                end
             end
         end
     end
 end
-
 
 data:extend(bonus_modules)
 data:extend({ tile_beacon })
