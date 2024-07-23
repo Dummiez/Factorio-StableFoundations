@@ -4,10 +4,13 @@
 require 'shared'
 
 -- Declare constants
+local ENTITIES_PER_TICK = SETTING.EntityRefreshCount or settings.startup["sf-entity-tick-count"].default_value
 local ENEMY_FORCE = "enemy"
 local SF_TEXT_SPEED = 0.8
 local SF_TIME_TO_LIVE = 50
 local SF_TEXT_COLOR = { r = 0.5, g = 0.8, b = 0.5, a = 0.8 }
+
+local nextEntityIndex = nil
 
 local tileReinforcementCache = {}
 local instanceCache = {}
@@ -63,11 +66,11 @@ end
 
 -- Clear all modules on a specific reinforced tile
 local function removeAllModules(entity)
-	local module_inventory = entity.get_module_inventory()
-	if module_inventory and not module_inventory.is_empty() then else return end
+	local moduleInventory = entity.get_module_inventory()
+	if moduleInventory and not moduleInventory.is_empty() then else return end
 	for i = 1, #module_inventory do
-		if module_inventory[i].valid_for_read then
-			module_inventory[i].clear()
+		if moduleInventory[i].valid_for_read then
+			moduleInventory[i].clear()
 		end
 	end
 end
@@ -82,9 +85,9 @@ local function removeBuildingBonus(entity)
 		end
 		global.bonusBeacons[entity.unit_number] = nil
 	else -- Hard remove in case no beacons were found
-		local hidden_beacons = entity.surface.find_entities_filtered { name = "sf-tile-bonus", position = entity.position, radius = 0.9 }
-		if hidden_beacons and #hidden_beacons > 0 then
-			for _, beacon in pairs(hidden_beacons) do
+		local hiddenBeacons = entity.surface.find_entities_filtered { name = "sf-tile-bonus", position = entity.position, radius = 0.9 }
+		if hiddenBeacons and #hiddenBeacons > 0 then
+			for _, beacon in pairs(hiddenBeacons) do
 				beacon.destroy()
 			end
 		end
@@ -303,10 +306,6 @@ local function entityStructureDestroyed(entityBuilding)
 	end
 end
 
--- Number of entities to scan per refresh
-local ENTITIES_PER_TICK = SETTING.EntityRefreshCount or settings.startup["sf-entity-tick-count"].default_value
-local nextEntityIndex = nil
-
 -- Iterate through global entities that are logged
 local function periodicEntityCheck()
     if not global.sfEntity then 
@@ -318,6 +317,11 @@ local function periodicEntityCheck()
     local count = 0
     local currentIndex = nextEntityIndex
     local entitiesToRemove = {}
+
+    -- Check if currentIndex is valid
+    if currentIndex and not global.sfEntity[currentIndex] then
+        currentIndex = nil
+    end
 
     while count < ENTITIES_PER_TICK do
         currentIndex, entityData = next(global.sfEntity, currentIndex)
