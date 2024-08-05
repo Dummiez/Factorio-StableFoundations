@@ -68,7 +68,7 @@ end
 local function removeAllModules(entity)
 	local moduleInventory = entity.get_module_inventory()
 	if moduleInventory and not moduleInventory.is_empty() then else return end
-	for i = 1, #module_inventory do
+	for i = 1, #moduleInventory do
 		if moduleInventory[i].valid_for_read then
 			moduleInventory[i].clear()
 		end
@@ -103,8 +103,8 @@ local function applyBuildingBonus(surface, entity, tileType)
 	end
 	local bonus = getTileReinforcement(tileType.name)
 	if not bonus then return end
-	local hidden_beacons = entity.surface.find_entities_filtered { name = "sf-tile-bonus", position = entity.position, radius = 0.9 }
-	local beacon = hidden_beacons[1]
+	local hiddenBeacons = entity.surface.find_entities_filtered { name = "sf-tile-bonus", position = entity.position, radius = 0.9 }
+	local beacon = hiddenBeacons[1]
 	-- Create ephemeral beacon to give buff to building on foundation
 	if not beacon and bonus.tier then
 		beacon = surface.create_entity {
@@ -252,7 +252,7 @@ local function entityStructureDamaged(entityBuilding, attackingEntity, attacking
 	if not isChunkReinforced(entityBuilding.surface, entityBuilding.position) then return end
 
 	local entityUID = entityBuilding.unit_number
-	if not entityUID and not canReinforceBuilding(entityBuilding) and entityBuilding.force.name ~= ENEMY_FORCE then return end
+	if not entityUID and not canReinforceBuilding(entityBuilding) and not entityBuilding.force.name:find(ENEMY_FORCE) then return end
 
 	local buildTileType = entityBuilding.surface.get_tile(entityBuilding.position)
 	if not buildTileType then return end
