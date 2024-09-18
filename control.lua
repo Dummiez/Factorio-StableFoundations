@@ -6,6 +6,7 @@ require 'shared'
 -- Declare constants
 local ENTITIES_PER_TICK = SETTING.EntityRefreshCount or settings.startup["sf-entity-tick-count"].default_value
 local ENEMY_FORCE = "enemy"
+local PLAYER_FORCE = "player"
 local SF_TEXT_SPEED = 0.8
 local SF_TIME_TO_LIVE = 50
 local SF_TEXT_COLOR = { r = 0.5, g = 0.8, b = 0.5, a = 0.8 }
@@ -233,14 +234,14 @@ local function entityStructureReinforced(entityUser, tileList, tileType)
 		local eventTileY = math.floor(eventTile.position.y)
 
 		for _, entityBuilding in pairs(areaBuilding) do
-			local buildPositionX = math.floor(entityBuilding.position.x)
-			local buildPositionY = math.floor(entityBuilding.position.y)
-
-			if (eventTileX == buildPositionX) and (eventTileY == buildPositionY) then
-				getMatchingBuilding(entityUser, entityBuilding, tileType)
-				applyBuildingBonus(mainSurface, entityBuilding, tileType)
-				break
-			end
+		    if entityBuilding.valid then
+		        local buildPositionX = math.floor(entityBuilding.position.x)
+		        local buildPositionY = math.floor(entityBuilding.position.y)
+		        if (eventTileX == buildPositionX) and (eventTileY == buildPositionY) then
+		            getMatchingBuilding(entityUser, entityBuilding, tileType)
+		            applyBuildingBonus(mainSurface, entityBuilding, tileType)
+		        end
+		    end
 		end
 	end
 end
@@ -252,7 +253,7 @@ local function entityStructureDamaged(entityBuilding, attackingEntity, attacking
 	if not isChunkReinforced(entityBuilding.surface, entityBuilding.position) then return end
 
 	local entityUID = entityBuilding.unit_number
-	if not entityUID and not canReinforceBuilding(entityBuilding) and not entityBuilding.force.name:find(ENEMY_FORCE) then return end
+	if not entityUID or not canReinforceBuilding(entityBuilding) or not entityBuilding.force.name:find(PLAYER_FORCE) then return end
 
 	local buildTileType = entityBuilding.surface.get_tile(entityBuilding.position)
 	if not buildTileType then return end
