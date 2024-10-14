@@ -243,4 +243,11 @@ data:extend {
 		default_value = "furnace, assembling-machine, mining-drill",
 		order = "ed"
 	},
+	{
+		type = "string-setting",
+		name = "sf-list-exclude",
+		setting_type = "startup",
+		default_value = "se-spaceship-rocket-engine, se-spaceship-ion-engine, se-spaceship-antimatter-engine",
+		order = "ee"
+	},
 }

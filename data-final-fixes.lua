@@ -53,20 +53,33 @@ for index, tiletype in ipairs(SF_NAMES) do
 end
 
 if SETTING.BuildingBonusEffects then
-    local allowedTypes = parseTiles(SETTING.BuildingBonusList) --{ "assembling-machine", "furnace", "mining-drill" }
+    local allowedTypes = parseTiles(SETTING.BuildingBonusList)
+    local excludedTypes = parseTiles(SETTING.BuildingExcludeList)
     local extraEffects = { "productivity", "speed", "consumption", "pollution" }
-    -- Modify allowed effects to enable buffs
+    
+    -- Create set of excluded types
+    local excludedSet = {}
+    for _, name in ipairs(excludedTypes) do
+        excludedSet[name] = true
+    end
+
+    -- Update allowed effects
+    local function updateAllowedEffects(dataObject)
+        dataObject.allowed_effects = dataObject.allowed_effects or {}
+
+        -- Reset any existing similar effects (necessary because allowed_effects has some weird internal issues)
+        if dataObject.allowed_effects[effect] then
+            table.remove(dataObject.allowed_effects, effect)
+        end
+        table.insert(dataObject.allowed_effects, effect)
+    end
+
+    -- Data type checking
     for _, dataType in pairs(allowedTypes) do
-        if data.raw[dataType] ~= nil then
-            for _, dataObject in pairs(data.raw[dataType]) do                 
-                --dataObject.allowed_effects = extraEffects
-                for _, effect in pairs(extraEffects) do
-                    dataObject.allowed_effects = dataObject.allowed_effects or {}
-                    -- reset any existing similar effects
-                    if dataObject.allowed_effects[effect] then
-                        table.remove(dataObject.allowed_effects, effect)
-                    end
-                    table.insert(dataObject.allowed_effects, effect)
+        if data.raw[dataType] then
+            for _, dataObject in pairs(data.raw[dataType]) do
+                if not excludedSet[dataObject.name] then
+                    updateAllowedEffects(dataObject)
                 end
             end
         end

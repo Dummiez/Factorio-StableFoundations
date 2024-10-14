@@ -54,6 +54,7 @@ SETTING = {
     EntityTickRefresh = settings.startup["sf-entity-refresh"].value,
     BuildingBonusEffects = settings.startup["sf-building-bonus-toggle"].value,
     BuildingBonusList = settings.startup["sf-list-bonus"],
+    BuildingExcludeList = settings.startup["sf-list-exclude"],
     IdentifiedList = {"default"}
 }
 
