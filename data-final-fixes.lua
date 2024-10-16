@@ -64,7 +64,7 @@ if SETTING.BuildingBonusEffects then
     end
 
     -- Update allowed effects
-    local function updateAllowedEffects(dataObject)
+    local function updateAllowedEffects(dataObject, effect)
         dataObject.allowed_effects = dataObject.allowed_effects or {}
 
         -- Reset any existing similar effects (necessary because allowed_effects has some weird internal issues)
@@ -79,12 +79,15 @@ if SETTING.BuildingBonusEffects then
         if data.raw[dataType] then
             for _, dataObject in pairs(data.raw[dataType]) do
                 if not excludedSet[dataObject.name] then
-                    updateAllowedEffects(dataObject)
+                    for _, effect in pairs(extraEffects) do
+                        updateAllowedEffects(dataObject, effect)
+                    end
                 end
             end
         end
     end
 end
+
 
 data:extend(bonus_modules)
 data:extend({ tile_beacon })

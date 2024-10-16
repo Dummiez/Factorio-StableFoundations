@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.1.7
+Date: 15. 10. 2024
+  Bugfixes:
+    - Fixed an issue with mod not correctly loading (Module inventory size is > 0 but no effects are allowed)
+---------------------------------------------------------------------------------------------------
 Version: 1.1.6
 Date: 13. 10. 2024
   Features:
