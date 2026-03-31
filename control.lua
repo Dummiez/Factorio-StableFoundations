@@ -7,8 +7,8 @@ require 'shared'
 local ENTITIES_PER_TICK = SETTING.EntityRefreshCount or settings.startup["sf-entity-tick-count"].default_value
 local ENEMY_FORCE = "enemy"
 local PLAYER_FORCE = "player"
-local SF_TEXT_SPEED = 2
-local SF_TIME_TO_LIVE = 75
+local SF_TEXT_SPEED = 1.5
+local SF_TIME_TO_LIVE = 100
 local SF_TEXT_COLOR = { r = 0.9, g = 0.9, b = 0.7, a = 0.9 }
 
 local nextEntityIndex = nil
@@ -202,13 +202,17 @@ local function unmarkChunkIfEmpty(surface, position)
 	local chunkY = math.floor(position.y / 32)
 	local chunkKey = chunkX .. "," .. chunkY
 	if not (storage.reinforcedChunks[surface.index] and storage.reinforcedChunks[surface.index][chunkKey]) then return end
-	-- Scan the chunk area for any remaining reinforced tiles before clearing the flag
+	-- Scan all tiles in the chunk and check each against the reinforcement cache,
+	-- rather than iterating cache keys into find_tiles_filtered. Cache keys may be
+	-- partial pattern strings (populated as a side effect of the string.find fallback
+	-- in getTileReinforcement), which find_tiles_filtered cannot accept as tile names.
 	local area = {
 		{ chunkX * 32, chunkY * 32 },
 		{ chunkX * 32 + 32, chunkY * 32 + 32 }
 	}
-	for tileName in pairs(tileReinforcementCache) do
-		if #surface.find_tiles_filtered({ area = area, name = tileName }) > 0 then
+	local tilesInChunk = surface.find_tiles_filtered({ area = area })
+	for _, tile in pairs(tilesInChunk) do
+		if getTileReinforcement(tile.name) then
 			return -- At least one reinforced tile remains
 		end
 	end
