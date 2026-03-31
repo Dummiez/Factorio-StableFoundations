@@ -101,7 +101,7 @@ data:extend {
 		setting_type = "startup",
 		default_value = 3,
 		minimum_value = 1,
-		maximum_value = 60,
+		maximum_value = 120,
 		order = "aha"
 	},
 	{
@@ -139,7 +139,7 @@ data:extend {
 		name = "sf-friendly-physical-reduction",
 		setting_type = "startup",
 		default_value = 100,
-		minimum_value = 0,
+		minimum_value = -100,
 		maximum_value = 200,
 		order = "ba"
 	},
@@ -148,7 +148,7 @@ data:extend {
 		name = "sf-friendly-explosion-reduction",
 		setting_type = "startup",
 		default_value = 100,
-		minimum_value = 0,
+		minimum_value = -100,
 		maximum_value = 200,
 		order = "bb"
 	},
@@ -157,7 +157,7 @@ data:extend {
 		name = "sf-friendly-impact-reduction",
 		setting_type = "startup",
 		default_value = 100,
-		minimum_value = 0,
+		minimum_value = -100,
 		maximum_value = 200,
 		order = "bc"
 	},
@@ -166,7 +166,7 @@ data:extend {
 		name = "sf-refined-reduction-percent",
 		setting_type = "startup",
 		default_value = 40,
-		minimum_value = 0,
+		minimum_value = -100,
 		maximum_value = 100,
 		order = "ca"
 	},
@@ -184,7 +184,7 @@ data:extend {
 		name = "sf-concrete-reduction-percent",
 		setting_type = "startup",
 		default_value = 30,
-		minimum_value = 0,
+		minimum_value = -100,
 		maximum_value = 100,
 		order = "cb"
 	},
@@ -202,7 +202,7 @@ data:extend {
 		name = "sf-stone-reduction-percent",
 		setting_type = "startup",
 		default_value = 20,
-		minimum_value = 0,
+		minimum_value = -100,
 		maximum_value = 100,
 		order = "cc"
 	},

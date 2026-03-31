@@ -1,4 +1,36 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.3.0
+Date: 31. 03. 2026
+  Features:
+    - Negative values are now possible in the mod settings for damage reduction.
+  Translation:
+    - Added German (provided by OC1024).
+    - Added Simplified Chinese (provided by DeepSeek).
+    - Translations now apply to the reinforced indicator text in-game.
+  Other:
+    - Optimization for structure health calculations.
+    - Minor performance improvements to foundation bonuses.
+  Bugfixes:
+    - Fixed other bonuses not applying due to productivity bonus (This still uses the vanilla method of applying bonuses via beacons, so productivity bonuses only work on intermediate products, etc).
+    - Fixed text scrolling speed.
+    - Mod compatibility fix attempts.
+---------------------------------------------------------------------------------------------------
+Version: 1.2.0
+Date: 13. 11. 2024
+  Bugfixes:
+    - Fixed an issue with rocket stack size for some items.
+    - Fixed reinforced text appearing on other planets.
+---------------------------------------------------------------------------------------------------
+Version: 1.1.9
+Date: 24. 10. 2024
+  Bugfixes:
+    - Fixed an issue with reinforcing structures with energy usage (lamps, displays).
+---------------------------------------------------------------------------------------------------
+Version: 1.1.8
+Date: 24. 10. 2024
+  Other:
+    - Compatibility for 2.0 / Space Age DLC.
+---------------------------------------------------------------------------------------------------
 Version: 1.1.7
 Date: 15. 10. 2024
   Bugfixes:
