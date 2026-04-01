@@ -1,5 +1,5 @@
 -- control.lua
--- Dummiez 2026/03/31
+-- Dummiez 2026/04/01
 
 require 'shared'
 
@@ -7,7 +7,7 @@ require 'shared'
 local ENTITIES_PER_TICK = SETTING.EntityRefreshCount or settings.startup["sf-entity-tick-count"].default_value
 local ENEMY_FORCE = "enemy"
 local PLAYER_FORCE = "player"
-local SF_TEXT_SPEED = 1.5
+local SF_TEXT_SPEED = 1.6
 local SF_TIME_TO_LIVE = 100
 local SF_TEXT_COLOR = { r = 0.9, g = 0.9, b = 0.7, a = 0.9 }
 
@@ -202,10 +202,8 @@ local function unmarkChunkIfEmpty(surface, position)
 	local chunkY = math.floor(position.y / 32)
 	local chunkKey = chunkX .. "," .. chunkY
 	if not (storage.reinforcedChunks[surface.index] and storage.reinforcedChunks[surface.index][chunkKey]) then return end
-	-- Scan all tiles in the chunk and check each against the reinforcement cache,
-	-- rather than iterating cache keys into find_tiles_filtered. Cache keys may be
-	-- partial pattern strings (populated as a side effect of the string.find fallback
-	-- in getTileReinforcement), which find_tiles_filtered cannot accept as tile names.
+
+	-- Scan all tiles in the chunk and check each against the reinforcement cache
 	local area = {
 		{ chunkX * 32, chunkY * 32 },
 		{ chunkX * 32 + 32, chunkY * 32 + 32 }
@@ -380,37 +378,49 @@ local function periodicEntityCheck()
         currentIndex = nil
     end
 
-    while count < ENTITIES_PER_TICK do
-        local healthData
-        currentIndex, healthData = next(storage.sfHealth, currentIndex)
-        if not currentIndex then
-            nextEntityIndex = nil
-            break
-        end
+while count < ENTITIES_PER_TICK do
+    local storedHealth
+    currentIndex, storedHealth = next(storage.sfHealth, currentIndex)
+    if not currentIndex then
+        nextEntityIndex = nil
+        break
+    end
 
+    if type(storedHealth) == "number" then
         local entityData = storage.sfEntity[currentIndex]
-        local entity = entityData and entityData.entity
-
-        if not entity or not entity.valid or entity.health == entity.max_health or entity.health == 0 then
+        if not entityData then
             table.insert(entitiesToRemove, currentIndex)
-        elseif entity.minable and entity.health ~= healthData then
-            -- Sync sfHealth to catch out-of-band health changes (e.g. robot repairs)
-            if entity.health == entity.max_health then
+        else
+            local entity = entityData.entity
+            if not entity or not entity.valid then
                 table.insert(entitiesToRemove, currentIndex)
             else
-                storage.sfHealth[currentIndex] = entity.health
+                local health = entity.health
+                local maxHealth = entity.max_health
+                if health == maxHealth or health == 0 then
+                    table.insert(entitiesToRemove, currentIndex)
+                elseif entity.minable and health ~= storedHealth then
+                    if health >= maxHealth then
+                        table.insert(entitiesToRemove, currentIndex)
+                    else
+                        storage.sfHealth[currentIndex] = health
+                    end
+                end
             end
         end
-
-        count = count + 1
+    else
+        table.insert(entitiesToRemove, currentIndex)
     end
+
+    count = count + 1
+end
 
     if currentIndex then
         nextEntityIndex = currentIndex
     end
 
     for _, entityUID in ipairs(entitiesToRemove) do
-        storage.sfHealth[entityUID] = nil  -- Only clear sfHealth; sfEntity stays for tile rate cache
+        storage.sfHealth[entityUID] = nil
     end
 end
 
@@ -457,3 +467,24 @@ script.on_event({ defines.events.on_built_entity, defines.events.on_robot_built_
 
 script.on_nth_tick(SETTING.EntityTickRefresh,
 	periodicEntityCheck)
+
+script.on_configuration_changed(function(data)
+    local changes = data.mod_changes and data.mod_changes["StableFoundations"]
+    if not changes then return end
+
+    if storage.sfHealth then
+        for uid, value in pairs(storage.sfHealth) do
+            if type(value) ~= "number" then
+                storage.sfHealth[uid] = nil
+            end
+        end
+    end
+
+    if storage.sfEntity then
+        for uid, value in pairs(storage.sfEntity) do
+            if type(value) ~= "table" or not value.entity or not value.tileRate then
+                storage.sfEntity[uid] = nil
+            end
+        end
+    end
+end)
