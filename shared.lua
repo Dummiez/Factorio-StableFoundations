@@ -44,6 +44,7 @@ SETTING = {
     ReinforceWalls = settings.startup["sf-reinforce-wall-toggle"].value,
     ReinforceUnits = settings.startup["sf-reinforce-units-toggle"].value,
     ReinforcePlayers = settings.startup["sf-reinforce-players-toggle"].value,
+    ReinforceQuality = settings.startup["sf-quality-damage-reduction"].value,
     SafePoles = settings.startup["sf-invulnerable-poles-toggle"].value,
     SafeRails = settings.startup["sf-invulnerable-rails-toggle"].value,
     SafeLights = settings.startup["sf-invulnerable-lamps-toggle"].value,

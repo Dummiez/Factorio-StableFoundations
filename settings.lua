@@ -114,6 +114,15 @@ data:extend {
 		order = "ahb"
 	},
 	{
+		type = "int-setting",
+		name = "sf-quality-damage-reduction",
+		setting_type = "startup",
+		default_value = 5,
+		minimum_value = -10,
+		maximum_value = 10,
+		order = "ahc"
+	},
+	{
 		type = "string-setting",
 		name = "sf-production-list",
 		setting_type = "startup",
@@ -165,7 +174,7 @@ data:extend {
 		type = "int-setting",
 		name = "sf-refined-reduction-percent",
 		setting_type = "startup",
-		default_value = 40,
+		default_value = 25,
 		minimum_value = -100,
 		maximum_value = 100,
 		order = "ca"
@@ -174,7 +183,7 @@ data:extend {
 		type = "int-setting",
 		name = "sf-refined-reduction-flat",
 		setting_type = "startup",
-		default_value = 10,
+		default_value = 8,
 		minimum_value = 0,
 		maximum_value = 1000,
 		order = "cd"
@@ -183,7 +192,7 @@ data:extend {
 		type = "int-setting",
 		name = "sf-concrete-reduction-percent",
 		setting_type = "startup",
-		default_value = 30,
+		default_value = 20,
 		minimum_value = -100,
 		maximum_value = 100,
 		order = "cb"
@@ -201,7 +210,7 @@ data:extend {
 		type = "int-setting",
 		name = "sf-stone-reduction-percent",
 		setting_type = "startup",
-		default_value = 20,
+		default_value = 15,
 		minimum_value = -100,
 		maximum_value = 100,
 		order = "cc"
@@ -210,7 +219,7 @@ data:extend {
 		type = "int-setting",
 		name = "sf-stone-reduction-flat",
 		setting_type = "startup",
-		default_value = 2,
+		default_value = 3,
 		minimum_value = 0,
 		maximum_value = 1000,
 		order = "cf"

@@ -88,23 +88,31 @@ end
 
 if SETTING.BuildingBonusEffects then
     local allowedTypes = parseTiles(SETTING.BuildingBonusList)
-    local excludedTypes = parseTiles(SETTING.BuildingExcludeList)
-    local extraEffects = { "speed", "productivity", "consumption", "pollution", "quality" }
+    if not allowedTypes then return end
 
-    -- Create set of excluded types
-    local excludedSet = {}
-    for _, name in ipairs(excludedTypes) do
-        excludedSet[name] = true
-    end
+    local extraEffects = { "speed", "productivity", "consumption", "pollution", "quality" }
 
     -- Update allowed effects
     local function updateAllowedEffects(dataObject, effect)
         dataObject.allowed_effects = dataObject.allowed_effects or {}
 
-        -- Reset any existing similar effects
-        if dataObject.allowed_effects[effect] then
-            table.remove(dataObject.allowed_effects, effect)
+        if dataObject.effect_receiver then
+            dataObject.effect_receiver.uses_module_effects = true
+            dataObject.effect_receiver.uses_beacon_effects = true
+        else
+            dataObject.effect_receiver = {
+                uses_module_effects = true,
+                uses_beacon_effects = true,
+            }
         end
+
+        -- Check if effect already exists in the array
+        for _, existing in ipairs(dataObject.allowed_effects) do
+            if existing == effect then
+                return  -- Already present, nothing to do
+            end
+        end
+
         table.insert(dataObject.allowed_effects, effect)
     end
 
@@ -112,22 +120,36 @@ if SETTING.BuildingBonusEffects then
     for _, dataType in pairs(allowedTypes) do
         if data.raw[dataType] then
             for _, dataObject in pairs(data.raw[dataType]) do
-                if not excludedSet[dataObject.name] then
-                    for _, effect in pairs(extraEffects) do
-                        updateAllowedEffects(dataObject, effect)
-                    end
+                for _, effect in pairs(extraEffects) do
+                    updateAllowedEffects(dataObject, effect)
                 end
             end
         end
     end
+
+    -- local function matchesAny(name, patterns)
+    --     for _, pattern in ipairs(patterns) do
+    --         -- Exact match
+    --         if name == pattern then return true end
+    --         -- Prefix wildcard: "iron-*"
+    --         local prefix = pattern:match("^(.-)%*$")
+    --         if prefix and name:sub(1, #prefix) == prefix then return true end
+    --     end
+    --     return false
+    -- end
     -- Force recipes to allow bonuses (currently causes an issue with items' rocket stack size being adjusted)
-    -- for _, recipe in pairs(data.raw.recipe) do
-    --     recipe.allow_productivity = true
-    --     recipe.allow_consumption = true
-    --     recipe.allow_speed = true
-    --     recipe.allow_pollution = true
-    --     recipe.allow_quality = true
-    --     recipe.allowed_module_categories = nil
+    -- if SETTING.RecipeBonusList then
+    --     local allowedRecipes = parseTiles(SETTING.RecipeBonusList)
+    --     for recipeName, recipe in pairs(data.raw.recipe) do
+    --         if matchesAny(recipeName, allowedRecipes) then
+    --             recipe.allow_productivity = true
+    --             recipe.allow_consumption = true
+    --             recipe.allow_speed      = true
+    --             recipe.allow_pollution  = true
+    --             recipe.allow_quality    = true
+    --             recipe.allowed_module_categories = nil
+    --         end
+    --     end
     -- end
 end
 

@@ -256,14 +256,15 @@ local function getMatchingBuilding(entityUser, entityBuilding, tileType)
 
     markChunkReinforced(entityBuilding.surface, entityBuilding.position)
     local invCaption = toggleInvulnerabilities(entityBuilding, false)
-    showPopupText(entityUser, entityBuilding, not invCaption and
-        { "",
+	showPopupText(entityUser, entityBuilding, not invCaption and
+		{ "",
 			entityBuilding.localised_name or { "entity-name." .. entityBuilding.name },
-			" ", { "sf-mod.reinforced-with" }, " ",
-			tileType.localised_name or { "entity-name." .. tileType.name },
-			" (" .. tileRate.percent .. "%)" }
-        or
-        { "",
+			" ", { "sf-mod.reinforced-with" }, " ", tileType.localised_name or { "entity-name." .. tileType.name },
+			" (" .. (entityBuilding.quality.level > 0 and
+				tileRate.percent + (entityBuilding.quality.level * SETTING.ReinforceQuality) .. "%)" or
+				tileRate.percent .. "%)") }
+		or
+		{ "",
 			entityBuilding.localised_name or { "entity-name." .. entityBuilding.name },
 			" ", { "sf-mod.reinforced" } })
 end
@@ -299,6 +300,12 @@ local function entityStructureReinforced(entityUser, tileList, tileType)
 	end
 end
 
+local function getQualityDamageReduction(entityBuilding)
+	if not entityBuilding.quality then return 0 end
+	local quality_level = entityBuilding.quality.level or 0
+	return quality_level * SETTING.ReinforceQuality
+end
+
 -- Recalculate damage on foundations
 local function entityStructureDamaged(entityBuilding, attackingEntity, attackingForce, finalDamage, finalHealth, damageType)
     if not (entityBuilding and entityBuilding.valid and finalDamage > 0 and entityBuilding.surface and entityBuilding.position) then return end
@@ -325,23 +332,28 @@ local function entityStructureDamaged(entityBuilding, attackingEntity, attacking
     toggleInvulnerabilities(entityBuilding, false)
     if not entityBuilding.destructible then return end
 
-    local tileReducePercent = tileRate.percent
-    local tileReduceFlat = tileRate.flat
-    local effectReduce = 1
+	local tileReducePercent = tileRate.percent
+	local tileReduceFlat = tileRate.flat
+	local effectReduce = 1
 
-    if (attackingForce == entityBuilding.force) and attackingEntity then
-        if not SETTING.FriendlyDamageReduction then
-            tileReduceFlat = 0
-            tileReducePercent = 0
-        end
-        effectReduce = (damageType == "explosion" and SETTING.FriendlyExplosionDamage / 100
-            or damageType == "impact" and SETTING.FriendlyImpactDamage / 100
-            or damageType == "physical" and SETTING.FriendlyPhysicalDamage / 100 or effectReduce)
-    end
+	local qualityReducePercent = getQualityDamageReduction(entityBuilding)
+	local totalReducePercent = tileReducePercent + qualityReducePercent
 
-    local finalFlatDamage = (finalDamage - tileReduceFlat) > 0 and (finalDamage - tileReduceFlat) or
-        1 / (tileReduceFlat - finalDamage + 2)
-    local mitigatedDamage = (finalFlatDamage * effectReduce) * (1 - (tileReducePercent / 100))
+	if (attackingForce == entityBuilding.force) and attackingEntity then
+		if not SETTING.FriendlyDamageReduction then
+			tileReduceFlat = 0
+			totalReducePercent = 0
+		end
+		effectReduce = (damageType == "explosion" and SETTING.FriendlyExplosionDamage / 100
+			or damageType == "impact" and SETTING.FriendlyImpactDamage / 100
+			or damageType == "physical" and SETTING.FriendlyPhysicalDamage / 100 or effectReduce)
+	end
+
+	if totalReducePercent > 100 then totalReducePercent = 100 end
+
+	local finalFlatDamage = (finalDamage - tileReduceFlat) > 0 and (finalDamage - tileReduceFlat) or
+		1 / (tileReduceFlat - finalDamage + 2)
+	local mitigatedDamage = (finalFlatDamage * effectReduce) * (1 - (totalReducePercent / 100))
 
     local preHealth = storage.sfHealth[entityUID]
     local updatedHealth = (preHealth - mitigatedDamage) > 0 and (preHealth - mitigatedDamage) or 0
@@ -427,46 +439,90 @@ end
 -- Event handlers
 script.on_init(initGlobalProperties)
 
-script.on_event(
-	{ defines.events.on_entity_died, defines.events.on_player_mined_entity, defines.events.on_robot_mined_entity },
-	function(event)
-		if event.entity then
-			entityStructureDestroyed(event.entity)
-		end
-	end)
+-- Resolves the acting user across all build sources, including
+-- script-raised events and cloning which carry no player/robot
+local function handleEntityBuilt(event)
+    local entity = event.destination_entity or event.entity  -- on_entity_cloned uses destination_entity
+    if not (entity and entity.valid) then return end
 
-script.on_event({ defines.events.on_entity_damaged },
-	function(event)
-		entityStructureDamaged(event.entity, event.cause, event.force, event.final_damage_amount, event.final_health,
-			event.damage_type.name)
-	end)
+    -- script-raised events so entityStructureReinforced still has a .surface
+    local user = (event.player_index and game.players[event.player_index])
+        or event.robot
+        or { surface = entity.surface, force = entity.force }
 
-script.on_event({ defines.events.on_player_built_tile, defines.events.on_robot_built_tile },
-	function(event)
-		local user = event.player_index and game.players[event.player_index] or event.robot
-		entityStructureReinforced(user, event.tiles, event.tile)
-	end)
+    entityStructureReinforced(user, nil, entity)
+end
 
-script.on_event({ defines.events.on_player_mined_tile, defines.events.on_robot_mined_tile },
-	function(event)
-		local user = event.player_index and game.players[event.player_index] or event.robot
-		entityStructureReinforced(user, event.tiles, nil)
-		-- Unmark any chunks that no longer contain reinforced tiles after mining.
-		if user and user.surface then
-			for _, tile in pairs(event.tiles) do
-				unmarkChunkIfEmpty(user.surface, tile.position)
-			end
-		end
-	end)
+for _, eventName in pairs({
+    "on_built_entity",
+    "on_robot_built_entity",
+    "on_entity_cloned",
+    "script_raised_built",
+    "script_raised_revive",
+}) do
+    script.on_event(defines.events[eventName], handleEntityBuilt)
+end
 
-script.on_event({ defines.events.on_built_entity, defines.events.on_robot_built_entity },
-	function(event)
-		local user = event.player_index and game.players[event.player_index] or event.robot
-		entityStructureReinforced(user, nil, event.entity)
-	end)
+-- script_raised_destroy carries no actor; entity is all we need
+local function handleEntityRemoved(event)
+    if event.entity then
+        entityStructureDestroyed(event.entity)
+    end
+end
 
-script.on_nth_tick(SETTING.EntityTickRefresh,
-	periodicEntityCheck)
+for _, eventName in pairs({
+    "on_entity_died",
+    "on_player_mined_entity",
+    "on_robot_mined_entity",
+    "script_raised_destroy",
+}) do
+    script.on_event(defines.events[eventName], handleEntityRemoved)
+end
+
+script.on_event(defines.events.on_entity_damaged, function(event)
+    entityStructureDamaged(
+        event.entity,
+        event.cause,
+        event.force,
+        event.final_damage_amount,
+        event.final_health,
+        event.damage_type.name
+    )
+end)
+
+local function handleTileBuilt(event)
+    local user = (event.player_index and game.players[event.player_index]) or event.robot
+    entityStructureReinforced(user, event.tiles, event.tile)
+end
+
+for _, eventName in pairs({
+    "on_player_built_tile",
+    "on_robot_built_tile",
+}) do
+    script.on_event(defines.events[eventName], handleTileBuilt)
+end
+
+local function handleTileMined(event)
+    local user = (event.player_index and game.players[event.player_index]) or event.robot
+    entityStructureReinforced(user, event.tiles, nil)
+
+    -- Unmark chunks that no longer contain any reinforced tiles.
+    if user and user.surface then
+        for _, tile in pairs(event.tiles) do
+            unmarkChunkIfEmpty(user.surface, tile.position)
+        end
+    end
+end
+
+for _, eventName in pairs({
+    "on_player_mined_tile",
+    "on_robot_mined_tile",
+}) do
+    script.on_event(defines.events[eventName], handleTileMined)
+end
+
+-- Periodic check & config
+script.on_nth_tick(SETTING.EntityTickRefresh, periodicEntityCheck)
 
 script.on_configuration_changed(function(data)
     local changes = data.mod_changes and data.mod_changes["StableFoundations"]
