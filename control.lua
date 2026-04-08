@@ -375,6 +375,35 @@ local function entityStructureDestroyed(entityBuilding)
 	end
 end
 
+-- Fired when another mod changes tiles via raise_script_set_tiles
+local function handleScriptSetTiles(event)
+    local surface = game.surfaces[event.surface_index]
+    if not surface then return end
+    if not (event.tiles and #event.tiles > 0) then return end
+
+    for _, tile in pairs(event.tiles) do
+        local tileProto = surface.get_tile(tile.position).prototype
+        if tileProto then
+            local findArea = {
+                { tile.position.x - 1, tile.position.y - 1 },
+                { tile.position.x + 1, tile.position.y + 1 }
+            }
+            for _, entityBuilding in pairs(surface.find_entities(findArea)) do
+                if entityBuilding.valid then
+                    local bx = math.floor(entityBuilding.position.x)
+                    local by = math.floor(entityBuilding.position.y)
+                    if bx == math.floor(tile.position.x) and by == math.floor(tile.position.y) then
+                        -- Fix: resolve force per-entity so the force check in getMatchingBuilding passes
+                        local user = { surface = surface, force = entityBuilding.force }
+                        getMatchingBuilding(user, entityBuilding, tileProto)
+                        applyBuildingBonus(surface, entityBuilding, tileProto)
+                    end
+                end
+            end
+        end
+    end
+end
+
 -- Iterate through tracked entities to sync health and remove stale entries
 local function periodicEntityCheck()
     if not storage.sfHealth then
@@ -520,6 +549,8 @@ for _, eventName in pairs({
 }) do
     script.on_event(defines.events[eventName], handleTileMined)
 end
+
+script.on_event(defines.events.script_raised_set_tiles, handleScriptSetTiles)
 
 -- Periodic check & config
 script.on_nth_tick(SETTING.EntityTickRefresh, periodicEntityCheck)
