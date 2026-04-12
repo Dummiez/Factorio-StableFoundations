@@ -286,15 +286,26 @@ local function entityStructureReinforced(entityUser, tileList, tileType)
 		local areaBuilding = mainSurface.find_entities(findEntityArea)
 		local eventTileX = math.floor(eventTile.position.x)
 		local eventTileY = math.floor(eventTile.position.y)
+		local searchTileX = 0
+		local searchTileY = 0
 
 		for _, entityBuilding in pairs(areaBuilding) do
 			if entityBuilding.valid then
-				local buildPositionX = math.floor(entityBuilding.position.x)
-				local buildPositionY = math.floor(entityBuilding.position.y)
-				if (eventTileX == buildPositionX) and (eventTileY == buildPositionY) then
-					getMatchingBuilding(entityUser, entityBuilding, tileType)
-					applyBuildingBonus(mainSurface, entityBuilding, tileType)
+
+				-- Ensure that the entire bounding box is covered uniformly. If not, remove building bonuses.
+				for searchTileX=math.floor(entityBuilding.bounding_box.left_top.x),math.floor(entityBuilding.bounding_box.right_bottom.x) do
+					for searchTileY=math.floor(entityBuilding.bounding_box.left_top.y),math.floor(entityBuilding.bounding_box.right_bottom.y) do
+						if tileType ~= mainSurface.get_tile({ searchTileX, searchTileY }).prototype then
+							getMatchingBuilding(entityUser, entityBuilding, nil)
+							applyBuildingBonus(mainSurface, entityBuilding, nil)
+							return
+						end
+					end
 				end
+
+				-- If everything checks out, apply the proper bonus.
+				getMatchingBuilding(entityUser, entityBuilding, tileType)
+				applyBuildingBonus(mainSurface, entityBuilding, tileType)
 			end
 		end
 	end
