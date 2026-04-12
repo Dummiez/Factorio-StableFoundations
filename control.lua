@@ -282,30 +282,38 @@ local function entityStructureReinforced(entityUser, tileList, tileType)
 		return
 	end
 	for _, eventTile in pairs(tileList) do
-		local findEntityArea = { { eventTile.position.x - 1, eventTile.position.y - 1 }, { eventTile.position.x + 1, eventTile.position.y + 1 } }
+		local findEntityArea = { { eventTile.position.x, eventTile.position.y}, { eventTile.position.x, eventTile.position.y } }
 		local areaBuilding = mainSurface.find_entities(findEntityArea)
 		local eventTileX = math.floor(eventTile.position.x)
 		local eventTileY = math.floor(eventTile.position.y)
 		local searchTileX = 0
 		local searchTileY = 0
+		local TileMismatch = false
 
 		for _, entityBuilding in pairs(areaBuilding) do
 			if entityBuilding.valid then
-
+				TileMismatch = false
 				-- Ensure that the entire bounding box is covered uniformly. If not, remove building bonuses.
 				for searchTileX=math.floor(entityBuilding.bounding_box.left_top.x),math.floor(entityBuilding.bounding_box.right_bottom.x) do
 					for searchTileY=math.floor(entityBuilding.bounding_box.left_top.y),math.floor(entityBuilding.bounding_box.right_bottom.y) do
 						if tileType ~= mainSurface.get_tile({ searchTileX, searchTileY }).prototype then
-							getMatchingBuilding(entityUser, entityBuilding, nil)
-							applyBuildingBonus(mainSurface, entityBuilding, nil)
-							return
+							TileMismatch = true
+							break
 						end
+					end
+					if TileMismatch then
+						break
 					end
 				end
 
-				-- If everything checks out, apply the proper bonus.
-				getMatchingBuilding(entityUser, entityBuilding, tileType)
-				applyBuildingBonus(mainSurface, entityBuilding, tileType)
+				-- If everything checks out, apply the proper bonus. If not, remove building bonuses.
+				if TileMismatch then
+					getMatchingBuilding(entityUser, entityBuilding, nil)
+					applyBuildingBonus(mainSurface, entityBuilding, nil)
+				else
+					getMatchingBuilding(entityUser, entityBuilding, tileType)
+					applyBuildingBonus(mainSurface, entityBuilding, tileType)
+                end
 			end
 		end
 	end
