@@ -15,6 +15,7 @@ local nextEntityIndex = nil
 
 local tileReinforcementCache = {}
 local instanceCache = {}
+local EFFECT_KEYS = { "productivity", "efficiency", "speed" }
 
 -- Add tiles to cache
 for tileName, tileRate in pairs(SF_TILES) do
@@ -42,17 +43,17 @@ end
 -- Get tile data for reinforcing
 local function getTileReinforcement(tileName)
 	if not tileName then return nil end
-	-- Direct cache hit
 	if tileReinforcementCache[tileName] ~= nil then
 		return tileReinforcementCache[tileName]
 	end
-	-- Fall back to pattern matching for modded tile names, then cache the result
+
 	for pattern, rate in pairs(tileReinforcementCache) do
 		if string.find(tileName, pattern) then
 			tileReinforcementCache[tileName] = rate
 			return rate
 		end
 	end
+
 	-- Cache negative result so this tile never pattern-matches again
 	tileReinforcementCache[tileName] = false
 	return nil
@@ -83,7 +84,11 @@ local function removeBuildingBonus(entity)
 		-- Hard fallback: spatial search in case bonusBeacons entry was missing.
 		-- This should rarely fire; if it fires often, bonusBeacons is going out of
 		-- sync somewhere upstream and should be investigated.
-		local hiddenBeacons = entity.surface.find_entities_filtered { name = "sf-tile-bonus", position = entity.position, radius = 0.9 }
+		local hiddenBeacons = entity.surface.find_entities_filtered {
+			name = "sf-tile-bonus",
+			position = entity.position,
+			radius = 0.9
+		}
 		if hiddenBeacons and #hiddenBeacons > 0 then
 			for _, beacon in pairs(hiddenBeacons) do
 				beacon.destroy()
@@ -99,6 +104,7 @@ local function applyBuildingBonus(surface, entity, tileType)
 		removeBuildingBonus(entity)
 		return
 	end
+
 	local bonus = getTileReinforcement(tileType.name)
 	if not bonus then return end
 
@@ -113,14 +119,17 @@ local function applyBuildingBonus(surface, entity, tileType)
 
 	-- Fall back to spatial search only if cache missed
 	if not beacon then
-		local found = entity.surface.find_entities_filtered { name = "sf-tile-bonus", position = entity.position, radius = 0.9 }
+		local found = entity.surface.find_entities_filtered {
+			name = "sf-tile-bonus",
+			position = entity.position,
+			radius = 0.9
+		}
 		beacon = found[1]
 	end
 
 	if bonus.tier then
 		local moduleInventory = beacon and beacon.get_module_inventory()
 
-		-- Create beacon if it doesn't exist yet
 		if not beacon then
 			beacon = surface.create_entity {
 				name = "sf-tile-bonus",
@@ -133,16 +142,11 @@ local function applyBuildingBonus(surface, entity, tileType)
 			moduleInventory = beacon.get_module_inventory()
 			storage.bonusBeacons[uid] = beacon
 		else
-			-- Beacon already exists — clear old modules before reinserting
 			removeAllModules(beacon)
 		end
 
-		-- Insert one module per effect type (only if non-zero)
-		local effectKeys = { "productivity", "efficiency", "speed" }
-		for _, key in ipairs(effectKeys) do
+		for _, key in ipairs(EFFECT_KEYS) do
 			local moduleName = "sf-tile-module-" .. bonus.tier .. "-" .. key
-			-- prototypes check ensures we don't insert a module that wasn't created
-			-- (data-final-fixes skips zero-value modules, so they won't exist in prototypes)
 			if prototypes.item[moduleName] then
 				moduleInventory.insert({ name = moduleName, count = 1 })
 			end
@@ -155,7 +159,11 @@ local function toggleInvulnerabilities(entityBuilding, toggleValue)
 	if not entityBuilding or not entityBuilding.valid then return false end
 	local entityName = entityBuilding.name
 	local entityType = entityBuilding.type
-	if instanceCache[entityName] ~= nil then goto apply_toggle end
+
+	if instanceCache[entityName] ~= nil then
+		goto apply_toggle
+	end
+
 	if (SETTING.SafeRails and (entityType == "rail" or entityName:find("rail") or entityType == "rail-signal" or entityType == "rail-chain-signal"))
 		or (SETTING.SafePoles and (entityName:find("big") and entityName:find("pole")))
 		or (SETTING.SafeLights and (entityName:find("lamp") and entityBuilding.prototype.get_max_energy_usage() > 2)) then
@@ -163,6 +171,7 @@ local function toggleInvulnerabilities(entityBuilding, toggleValue)
 	else
 		return false
 	end
+
 	::apply_toggle::
 	entityBuilding.destructible = toggleValue
 	entityBuilding.health = not toggleValue and entityBuilding.max_health or entityBuilding.health
@@ -205,7 +214,6 @@ local function unmarkChunkIfEmpty(surface, position)
 	local chunkKey = chunkX .. "," .. chunkY
 	if not (storage.reinforcedChunks[surface.index] and storage.reinforcedChunks[surface.index][chunkKey]) then return end
 
-	-- Scan all tiles in the chunk and check each against the reinforcement cache
 	local area = {
 		{ chunkX * 32, chunkY * 32 },
 		{ chunkX * 32 + 32, chunkY * 32 + 32 }
@@ -213,7 +221,7 @@ local function unmarkChunkIfEmpty(surface, position)
 	local tilesInChunk = surface.find_tiles_filtered({ area = area })
 	for _, tile in pairs(tilesInChunk) do
 		if getTileReinforcement(tile.name) then
-			return -- At least one reinforced tile remains
+			return
 		end
 	end
 	storage.reinforcedChunks[surface.index][chunkKey] = nil
@@ -247,13 +255,13 @@ end
 local function getMatchingBuilding(entityUser, entityBuilding, tileType)
 	if not entityUser or not entityBuilding or not entityBuilding.valid or not tileType then return end
 	if not (canReinforceBuilding(entityBuilding) and entityBuilding.force == entityUser.force) then return end
+
 	local tileRate = getTileReinforcement(tileType.name)
 	if not tileRate then return end
 
 	local uid = entityBuilding.unit_number
 	local existing = storage.sfEntity[uid]
-	local isNewReinforcement = not existing
-		or (existing.tileRate ~= tileRate)
+	local isNewReinforcement = not existing or (existing.tileRate ~= tileRate)
 
 	storage.sfEntity[uid] = { entity = entityBuilding, tileRate = tileRate }
 	if entityBuilding.health > 0 and entityBuilding.health ~= entityBuilding.max_health then
@@ -279,26 +287,38 @@ local function getMatchingBuilding(entityUser, entityBuilding, tileType)
 end
 
 -- Compute integer bounding box coords from entity, returns left, top, right, bottom, width, height
--- NOTE: Epsilon offsets (+0.1 / -0.1) strip Factorio's fractional bounding box padding (usually ±0.4)
+-- NOTE: Epsilon offsets (+0.1 / -0.1) strip Factorio's fractional bounding box padding (usually ±0.4).
 local function getBoundingBox(entityBuilding)
 	local box = entityBuilding.bounding_box
-	local left   = math.floor(box.left_top.x     + 0.1)
-	local top    = math.floor(box.left_top.y     + 0.1)
-	local right  = math.ceil (box.right_bottom.x - 0.1)
-	local bottom = math.ceil (box.right_bottom.y - 0.1)
+	local left = math.floor(box.left_top.x + 0.1)
+	local top = math.floor(box.left_top.y + 0.1)
+	local right = math.ceil(box.right_bottom.x - 0.1)
+	local bottom = math.ceil(box.right_bottom.y - 0.1)
 	return left, top, right, bottom, right - left, bottom - top
+end
+
+-- Shared tighter tile search area.
+-- Keeping this in one place prevents tile-built and script-set-tiles from drifting apart again.
+local function getTileSearchArea(position)
+	return {
+		{ position.x, position.y },
+		{ position.x + 1, position.y + 1 }
+	}
 end
 
 -- Returns true if every tile under the entity's footprint matches tileType.
 -- For 1x1 entities the tile is already known (cheapPath=true skips count_tiles_filtered).
 local function isFootprintUniform(surface, entityBuilding, tileType, cheapPath)
+	if not tileType then return false end
+
 	if cheapPath then
-		-- tileType was already fetched for a 1x1 entity; just check if it's reinforced
 		return getTileReinforcement(tileType.name) ~= nil
 	end
+
 	local left, top, right, bottom, w, h = getBoundingBox(entityBuilding)
 	local expectedArea = w * h
 	if expectedArea <= 0 then return false end
+
 	local tileCount = surface.count_tiles_filtered {
 		area = { { left, top }, { right, bottom } },
 		name = tileType.name
@@ -306,33 +326,60 @@ local function isFootprintUniform(surface, entityBuilding, tileType, cheapPath)
 	return tileCount == expectedArea
 end
 
+-- Returns the reinforced tile prototype only if the entire footprint is uniformly covered.
+local function getUniformReinforcedTile(surface, entityBuilding)
+	if not (surface and entityBuilding and entityBuilding.valid) then return nil end
+
+	local left, top, _, _, w, h = getBoundingBox(entityBuilding)
+	if w <= 0 or h <= 0 then return nil end
+
+	if w == 1 and h == 1 then
+		local centerTile = surface.get_tile({
+			math.floor(entityBuilding.position.x),
+			math.floor(entityBuilding.position.y)
+		}).prototype
+		return getTileReinforcement(centerTile.name) and centerTile or nil
+	end
+
+	local candidateTile = surface.get_tile({ left, top }).prototype
+	if not candidateTile or not getTileReinforcement(candidateTile.name) then
+		return nil
+	end
+
+	return isFootprintUniform(surface, entityBuilding, candidateTile, false) and candidateTile or nil
+end
+
+local function clearBuildingReinforcement(surface, entityBuilding)
+	if not (surface and entityBuilding and entityBuilding.valid and entityBuilding.unit_number) then return end
+	clearEntityTracking(entityBuilding.unit_number)
+	toggleInvulnerabilities(entityBuilding, true)
+	applyBuildingBonus(surface, entityBuilding, nil)
+	unmarkChunkIfEmpty(surface, entityBuilding.position)
+end
+
 -- Check if structure is reinforced and apply appropriate changes
 local function entityStructureReinforced(entityUser, tileList, tileType)
 	if not entityUser or not entityUser.surface then return end
 	local mainSurface = entityUser.surface
 
+	-- Single entity placement / clone / revive
 	if tileList == nil then
 		local entityBuilding = tileType
-		tileType = mainSurface.get_tile({ math.floor(entityBuilding.position.x), math.floor(entityBuilding.position.y) }).prototype
-		local _, _, _, _, w, h = getBoundingBox(entityBuilding)
-		local uniform = isFootprintUniform(mainSurface, entityBuilding, tileType, w <= 1 and h <= 1)
-		if uniform then
-			getMatchingBuilding(entityUser, entityBuilding, tileType)
-			applyBuildingBonus(mainSurface, entityBuilding, tileType)
+		local reinforcedTile = getUniformReinforcedTile(mainSurface, entityBuilding)
+
+		if reinforcedTile then
+			getMatchingBuilding(entityUser, entityBuilding, reinforcedTile)
+			applyBuildingBonus(mainSurface, entityBuilding, reinforcedTile)
 		else
-			getMatchingBuilding(entityUser, entityBuilding, nil)
-			applyBuildingBonus(mainSurface, entityBuilding, nil)
+			clearBuildingReinforcement(mainSurface, entityBuilding)
 		end
 		return
 	end
 
-	-- Gather unique buildings across all affected tiles
 	local uniqueBuildings = {}
-	for _, eventTile in pairs(tileList) do
-		local findEntityArea = {
-			{ eventTile.position.x - 1, eventTile.position.y - 1 },
-			{ eventTile.position.x + 1, eventTile.position.y + 1 }
-		}
+
+	for _, eventTile in ipairs(tileList) do
+		local findEntityArea = getTileSearchArea(eventTile.position)
 		for _, entityBuilding in pairs(mainSurface.find_entities(findEntityArea)) do
 			if entityBuilding.valid and entityBuilding.unit_number then
 				uniqueBuildings[entityBuilding.unit_number] = entityBuilding
@@ -342,20 +389,12 @@ local function entityStructureReinforced(entityUser, tileList, tileType)
 
 	for _, entityBuilding in pairs(uniqueBuildings) do
 		if entityBuilding.valid then
-			-- tileType is nil: tiles were removed, strip reinforcement and move on
-			if tileType == nil then
-				local uid = entityBuilding.unit_number
-				clearEntityTracking(uid)
-				applyBuildingBonus(mainSurface, entityBuilding, nil)
+			local reinforcedTile = getUniformReinforcedTile(mainSurface, entityBuilding)
+			if reinforcedTile then
+				getMatchingBuilding(entityUser, entityBuilding, reinforcedTile)
+				applyBuildingBonus(mainSurface, entityBuilding, reinforcedTile)
 			else
-				local _, _, _, _, w, h = getBoundingBox(entityBuilding)
-				if isFootprintUniform(mainSurface, entityBuilding, tileType, w <= 1 and h <= 1) then
-					getMatchingBuilding(entityUser, entityBuilding, tileType)
-					applyBuildingBonus(mainSurface, entityBuilding, tileType)
-				else
-					getMatchingBuilding(entityUser, entityBuilding, nil)
-					applyBuildingBonus(mainSurface, entityBuilding, nil)
-				end
+				clearBuildingReinforcement(mainSurface, entityBuilding)
 			end
 		end
 	end
@@ -371,18 +410,32 @@ end
 local function entityStructureDamaged(entityBuilding, attackingEntity, attackingForce, finalDamage, finalHealth, damageType)
 	if not (entityBuilding and entityBuilding.valid and finalDamage > 0 and entityBuilding.surface and entityBuilding.position) then return end
 	if not isChunkReinforced(entityBuilding.surface, entityBuilding.position) then return end
+	if not canReinforceBuilding(entityBuilding) or not entityBuilding.force.name:find(PLAYER_FORCE) then return end
 
+	local tileRate = nil
 	local entityUID = entityBuilding.unit_number
-	if not entityUID or not canReinforceBuilding(entityBuilding) or not entityBuilding.force.name:find(PLAYER_FORCE) then return end
 
-	local entityData = storage.sfEntity[entityUID]
-	local tileRate = entityData and entityData.tileRate
-	if not tileRate then
+	if entityBuilding.prototype.is_building then
+		if not entityUID then return end
+		local entityData = storage.sfEntity[entityUID]
+		tileRate = entityData and entityData.tileRate
+		if not tileRate then return end
+	else
+		-- It's a moving unit (player, car, spidertron, robot)
 		local buildTileType = entityBuilding.surface.get_tile(entityBuilding.position)
 		if not buildTileType then return end
 		tileRate = getTileReinforcement(buildTileType.name)
 		if not tileRate then return end
-		storage.sfEntity[entityUID] = { entity = entityBuilding, tileRate = tileRate }
+
+		-- Use a dummy UID for moving entities just so we can track their health within this tick/fight
+		if not entityUID then
+			-- If it's a character and controlled by a player, use the player's unique name
+			if entityBuilding.type == "character" and entityBuilding.player then
+				entityUID = "player_" .. entityBuilding.player.name
+			else
+				entityUID = "entity_" .. entityBuilding.unit_number
+			end
+		end
 	end
 
 	-- Ensure entity enters sfHealth tracking the first time it takes damage
@@ -422,7 +475,7 @@ local function entityStructureDamaged(entityBuilding, attackingEntity, attacking
 	entityBuilding.health = updatedHealth
 
 	if updatedHealth <= 0 or updatedHealth >= entityBuilding.max_health then
-		storage.sfHealth[entityUID] = nil  -- Remove from damaged tracking, sfEntity stays intact
+		storage.sfHealth[entityUID] = nil  -- Remove from damaged tracking
 	else
 		storage.sfHealth[entityUID] = updatedHealth
 	end
@@ -442,50 +495,27 @@ local function handleScriptSetTiles(event)
 	if not surface then return end
 	if not (event.tiles and #event.tiles > 0) then return end
 
-	-- Deduplicate entities across all changed tiles before processing, same
-	-- reason as entityStructureReinforced: large entities span multiple tiles.
 	local uniqueBuildings = {}
 
-	for _, tile in pairs(event.tiles) do
-		local findArea = {
-			{ tile.position.x - 1, tile.position.y - 1 },
-			{ tile.position.x + 1, tile.position.y + 1 }
-		}
+	for _, tile in ipairs(event.tiles) do
+		local findArea = getTileSearchArea(tile.position)
 		for _, entityBuilding in pairs(surface.find_entities(findArea)) do
 			if entityBuilding.valid and entityBuilding.unit_number then
-				-- Store tile position alongside entity so we know which tile triggered it.
-				if not uniqueBuildings[entityBuilding.unit_number] then
-					uniqueBuildings[entityBuilding.unit_number] = { entity = entityBuilding, tilePos = tile.position }
-				end
+				uniqueBuildings[entityBuilding.unit_number] = entityBuilding
 			end
 		end
 	end
 
-	for _, entry in pairs(uniqueBuildings) do
-		local entityBuilding = entry.entity
+	for _, entityBuilding in pairs(uniqueBuildings) do
 		if entityBuilding.valid then
-			local tileProto = surface.get_tile(entry.tilePos).prototype
-			if tileProto then
-				local user = { surface = surface, force = entityBuilding.force }
-				local _, _, _, _, w, h = getBoundingBox(entityBuilding)
+			local user = { surface = surface, force = entityBuilding.force }
+			local reinforcedTile = getUniformReinforcedTile(surface, entityBuilding)
 
-				if w <= 1 and h <= 1 then
-					if isFootprintUniform(surface, entityBuilding, tileProto, true) then
-						getMatchingBuilding(user, entityBuilding, tileProto)
-						applyBuildingBonus(surface, entityBuilding, tileProto)
-					else
-						getMatchingBuilding(user, entityBuilding, nil)
-						applyBuildingBonus(surface, entityBuilding, nil)
-					end
-				else
-					if isFootprintUniform(surface, entityBuilding, tileProto, false) then
-						getMatchingBuilding(user, entityBuilding, tileProto)
-						applyBuildingBonus(surface, entityBuilding, tileProto)
-					else
-						getMatchingBuilding(user, entityBuilding, nil)
-						applyBuildingBonus(surface, entityBuilding, nil)
-					end
-				end
+			if reinforcedTile then
+				getMatchingBuilding(user, entityBuilding, reinforcedTile)
+				applyBuildingBonus(surface, entityBuilding, reinforcedTile)
+			else
+				clearBuildingReinforcement(surface, entityBuilding)
 			end
 		end
 	end
@@ -558,10 +588,9 @@ script.on_init(initGlobalProperties)
 -- Resolves the acting user across all build sources, including
 -- script-raised events and cloning which carry no player/robot
 local function handleEntityBuilt(event)
-	local entity = event.destination_entity or event.entity  -- on_entity_cloned uses destination_entity
+	local entity = event.destination_entity or event.entity
 	if not (entity and entity.valid) then return end
 
-	-- script-raised events so entityStructureReinforced still has a .surface
 	local user = (event.player_index and game.players[event.player_index])
 		or event.robot
 		or { surface = entity.surface, force = entity.force }
@@ -579,7 +608,6 @@ for _, eventName in pairs({
 	script.on_event(defines.events[eventName], handleEntityBuilt)
 end
 
--- script_raised_destroy carries no actor; entity is all we need
 local function handleEntityRemoved(event)
 	if event.entity then
 		entityStructureDestroyed(event.entity)
@@ -622,9 +650,8 @@ local function handleTileMined(event)
 	local user = (event.player_index and game.players[event.player_index]) or event.robot
 	entityStructureReinforced(user, event.tiles, nil)
 
-	-- Unmark chunks that no longer contain any reinforced tiles.
 	if user and user.surface then
-		for _, tile in pairs(event.tiles) do
+		for _, tile in ipairs(event.tiles) do
 			unmarkChunkIfEmpty(user.surface, tile.position)
 		end
 	end
@@ -666,5 +693,28 @@ script.on_configuration_changed(function(data)
 	tileReinforcementCache = {}
 	for tileName, tileRate in pairs(SF_TILES) do
 		tileReinforcementCache[tileName] = tileRate
+	end
+
+	-- Re-resolve existing tracked entities against current tile coverage.
+	if storage.sfEntity then
+		for uid, data in pairs(storage.sfEntity) do
+			local entity = data.entity
+			if entity and entity.valid then
+				local reinforcedTile = getUniformReinforcedTile(entity.surface, entity)
+				if reinforcedTile then
+					local tileRate = getTileReinforcement(reinforcedTile.name)
+					if tileRate then
+						data.tileRate = tileRate
+						applyBuildingBonus(entity.surface, entity, reinforcedTile)
+					else
+						clearBuildingReinforcement(entity.surface, entity)
+					end
+				else
+					clearBuildingReinforcement(entity.surface, entity)
+				end
+			else
+				storage.sfEntity[uid] = nil
+			end
+		end
 	end
 end)

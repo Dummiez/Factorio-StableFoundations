@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.3.4
+Date: 13. 04. 2026
+  Balancing:
+    - Structures now require complete base coverage of the same foundation type in order to receive effects (Jan125).
+    - Internal adjustments for damage reduction calculation which should slightly improve mod performance.
+  Bugfixes:
+    - Fixed an issue where structures would keep damage reduction and bonuses even after foundations were removed. 
+    - Fixed a caching issue with entities.
+---------------------------------------------------------------------------------------------------
 Version: 1.3.3
 Date: 08. 04. 2026
   Compatibility:
