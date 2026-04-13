@@ -108,7 +108,7 @@ data:extend {
 		type = "int-setting",
 		name = "sf-entity-tick-count",
 		setting_type = "startup",
-		default_value = 200,
+		default_value = 300,
 		minimum_value = 1,
 		maximum_value = 10000,
 		order = "ahb"

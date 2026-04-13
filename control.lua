@@ -1,10 +1,10 @@
 -- control.lua
 -- Dummiez 2026/04/01
 
-require 'shared'
+Shared = require("shared")
 
 -- Declare constants
-local ENTITIES_PER_TICK = SETTING.EntityRefreshCount or settings.startup["sf-entity-tick-count"].default_value
+local ENTITIES_PER_TICK = Shared.SETTING.EntityRefreshCount or settings.startup["sf-entity-tick-count"].default_value
 local ENEMY_FORCE = "enemy"
 local PLAYER_FORCE = "player"
 local SF_TEXT_SPEED = 1.6
@@ -18,7 +18,7 @@ local instanceCache = {}
 local EFFECT_KEYS = { "productivity", "efficiency", "speed" }
 
 -- Add tiles to cache
-for tileName, tileRate in pairs(SF_TILES) do
+for tileName, tileRate in pairs(Shared.SF_TILES) do
 	tileReinforcementCache[tileName] = tileRate
 end
 
@@ -47,6 +47,7 @@ local function getTileReinforcement(tileName)
 		return tileReinforcementCache[tileName]
 	end
 
+	-- Fall back to pattern matching for modded tile names, then cache the result
 	for pattern, rate in pairs(tileReinforcementCache) do
 		if string.find(tileName, pattern) then
 			tileReinforcementCache[tileName] = rate
@@ -81,9 +82,9 @@ local function removeBuildingBonus(entity)
 		end
 		storage.bonusBeacons[uid] = nil
 	else
-		-- Hard fallback: spatial search in case bonusBeacons entry was missing.
+		-- Hard fallback: spatial search in case bonusBeacons entry was missing
 		-- This should rarely fire; if it fires often, bonusBeacons is going out of
-		-- sync somewhere upstream and should be investigated.
+		-- sync somewhere upstream and should be investigated
 		local hiddenBeacons = entity.surface.find_entities_filtered {
 			name = "sf-tile-bonus",
 			position = entity.position,
@@ -130,6 +131,7 @@ local function applyBuildingBonus(surface, entity, tileType)
 	if bonus.tier then
 		local moduleInventory = beacon and beacon.get_module_inventory()
 
+		-- Create beacon if it doesn't exist yet
 		if not beacon then
 			beacon = surface.create_entity {
 				name = "sf-tile-bonus",
@@ -142,11 +144,14 @@ local function applyBuildingBonus(surface, entity, tileType)
 			moduleInventory = beacon.get_module_inventory()
 			storage.bonusBeacons[uid] = beacon
 		else
+			-- Beacon already exists — clear old modules before reinserting
 			removeAllModules(beacon)
 		end
 
 		for _, key in ipairs(EFFECT_KEYS) do
 			local moduleName = "sf-tile-module-" .. bonus.tier .. "-" .. key
+			-- prototypes check ensures we don't insert a module that wasn't created
+			-- (data-final-fixes skips zero-value modules, so they won't exist in prototypes)
 			if prototypes.item[moduleName] then
 				moduleInventory.insert({ name = moduleName, count = 1 })
 			end
@@ -164,9 +169,9 @@ local function toggleInvulnerabilities(entityBuilding, toggleValue)
 		goto apply_toggle
 	end
 
-	if (SETTING.SafeRails and (entityType == "rail" or entityName:find("rail") or entityType == "rail-signal" or entityType == "rail-chain-signal"))
-		or (SETTING.SafePoles and (entityName:find("big") and entityName:find("pole")))
-		or (SETTING.SafeLights and (entityName:find("lamp") and entityBuilding.prototype.get_max_energy_usage() > 2)) then
+	if (Shared.SETTING.SafeRails and (entityType == "rail" or entityName:find("rail") or entityType == "rail-signal" or entityType == "rail-chain-signal"))
+		or (Shared.SETTING.SafePoles and (entityName:find("big") and entityName:find("pole")))
+		or (Shared.SETTING.SafeLights and (entityName:find("lamp") and entityBuilding.prototype.get_max_energy_usage() > 2)) then
 		instanceCache[entityName] = entityType
 	else
 		return false
@@ -180,7 +185,7 @@ end
 
 -- Whether to allow structure or unit reinforcement
 local function canReinforceBuilding(entityBuilding)
-	if not (entityBuilding and entityBuilding.valid and entityBuilding.destructible and entityBuilding.max_health > 0) then
+	if not (entityBuilding and entityBuilding.valid and entityBuilding.unit_number and entityBuilding.destructible and entityBuilding.max_health > 0) then
 		return false
 	end
 
@@ -190,16 +195,17 @@ local function canReinforceBuilding(entityBuilding)
 		or entityBuilding.name:find("wall") or entityBuilding.name:find("gate")
 
 	if isPlayer then
-		return SETTING.ReinforcePlayers
+		return Shared.SETTING.ReinforcePlayers
 	end
 
+	-- Edge cases where non-minable modded buildings won't get reinforced
 	if not entityBuilding.minable then
 		return false
 	end
 
-	if not isBuilding then return SETTING.ReinforceUnits end
-	if isWallEntity then return SETTING.ReinforceWalls end
-	if entityBuilding.prototype.is_military_target then return SETTING.ReinforceMiltBuildings end
+	if not isBuilding then return Shared.SETTING.ReinforceUnits end
+	if isWallEntity then return Shared.SETTING.ReinforceWalls end
+	if entityBuilding.prototype.is_military_target then return Shared.SETTING.ReinforceMiltBuildings end
 
 	return isBuilding
 end
@@ -208,6 +214,8 @@ end
 local function markChunkReinforced(surface, position)
 	if not surface or not position then return end
 	if not storage.reinforcedChunks then initGlobalProperties() end
+
+	-- Scan all tiles in the chunk and check each against the reinforcement cache
 	local chunkX = math.floor(position.x / 32)
 	local chunkY = math.floor(position.y / 32)
 	storage.reinforcedChunks[surface.index] = storage.reinforcedChunks[surface.index] or {}
@@ -228,12 +236,13 @@ local function unmarkChunkIfEmpty(surface, position)
 	local tilesInChunk = surface.find_tiles_filtered({ area = area })
 	for _, tile in pairs(tilesInChunk) do
 		if getTileReinforcement(tile.name) then
-			return
+			return -- At least one reinforced tile remains
 		end
 	end
 	storage.reinforcedChunks[surface.index][chunkKey] = nil
 end
 
+-- Chunk reinforcement cache for fast validation
 local function isChunkReinforced(surface, position)
 	if not surface or not position or not storage.reinforcedChunks then return false end
 	local chunkX = math.floor(position.x / 32)
@@ -242,8 +251,9 @@ local function isChunkReinforced(surface, position)
 		storage.reinforcedChunks[surface.index][chunkX .. "," .. chunkY] or false
 end
 
+-- Display reinforced popup text when a building meets foundation requirements
 local function showPopupText(entityUser, entityBuilding, caption)
-	if SETTING.ReinforcePopupToggle and entityUser.force and entityUser.force.players then else return end
+	if Shared.SETTING.ReinforcePopupToggle and entityUser.force and entityUser.force.players then else return end
 	for _, player in pairs(entityUser.force.players) do
 		if player and player.valid and player.character and entityBuilding.last_user and entityBuilding.surface == player.surface then
 			player.create_local_flying_text {
@@ -258,7 +268,7 @@ local function showPopupText(entityUser, entityBuilding, caption)
 	end
 end
 
--- Check if structure matches checks, also display popup text
+-- Check if structure matches foundation safety checks
 local function getMatchingBuilding(entityUser, entityBuilding, tileType)
 	if not entityUser or not entityBuilding or not entityBuilding.valid or not tileType then return end
 	if not (canReinforceBuilding(entityBuilding) and entityBuilding.force == entityUser.force) then return end
@@ -284,7 +294,7 @@ local function getMatchingBuilding(entityUser, entityBuilding, tileType)
 				entityBuilding.localised_name or { "entity-name." .. entityBuilding.name },
 				" ", { "sf-mod.reinforced-with" }, " ", tileType.localised_name or { "entity-name." .. tileType.name },
 				" (" .. (entityBuilding.quality.level > 0 and
-					tileRate.percent + (entityBuilding.quality.level * SETTING.ReinforceQuality) .. "%)" or
+					tileRate.percent + (entityBuilding.quality.level * Shared.SETTING.ReinforceQuality) .. "%)" or
 					tileRate.percent .. "%)") }
 			or
 			{ "",
@@ -294,7 +304,7 @@ local function getMatchingBuilding(entityUser, entityBuilding, tileType)
 end
 
 -- Compute integer bounding box coords from entity, returns left, top, right, bottom, width, height
--- NOTE: Epsilon offsets (+0.1 / -0.1) strip Factorio's fractional bounding box padding (usually ±0.4).
+-- NOTE: Epsilon offsets (+0.1 / -0.1) strip Factorio's fractional bounding box padding (usually ±0.4)
 local function getBoundingBox(entityBuilding)
 	local box = entityBuilding.bounding_box
 	local left = math.floor(box.left_top.x + 0.1)
@@ -304,8 +314,8 @@ local function getBoundingBox(entityBuilding)
 	return left, top, right, bottom, right - left, bottom - top
 end
 
--- Shared tighter tile search area.
--- Keeping this in one place prevents tile-built and script-set-tiles from drifting apart again.
+-- Shared tighter tile search area
+-- Keeping this in one place prevents tile-built and script-set-tiles from drifting apart again
 local function getTileSearchArea(position)
 	return {
 		{ position.x, position.y },
@@ -313,8 +323,8 @@ local function getTileSearchArea(position)
 	}
 end
 
--- Returns true if every tile under the entity's footprint matches tileType.
--- For 1x1 entities the tile is already known (cheapPath=true skips count_tiles_filtered).
+-- Returns true if every tile under the entity's footprint matches tileType
+-- For 1x1 entities the tile is already known (cheapPath=true skips count_tiles_filtered)
 local function isFootprintUniform(surface, entityBuilding, tileType, cheapPath)
 	if not tileType then return false end
 
@@ -333,7 +343,7 @@ local function isFootprintUniform(surface, entityBuilding, tileType, cheapPath)
 	return tileCount == expectedArea
 end
 
--- Returns the reinforced tile prototype only if the entire footprint is uniformly covered.
+-- Returns the reinforced tile prototype only if the entire footprint is uniformly covered
 local function getUniformReinforcedTile(surface, entityBuilding)
 	if not (surface and entityBuilding and entityBuilding.valid) then return nil end
 
@@ -416,7 +426,7 @@ end
 local function getQualityDamageReduction(entityBuilding)
 	if not entityBuilding.quality then return 0 end
 	local quality_level = entityBuilding.quality.level or 0
-	return quality_level * SETTING.ReinforceQuality
+	return quality_level * Shared.SETTING.ReinforceQuality
 end
 
 -- Recalculate damage on foundations
@@ -445,14 +455,14 @@ local function entityStructureDamaged(entityBuilding, attackingEntity, attacking
 			if entityBuilding.type == "character" and entityBuilding.player then
 				entityUID = "player_" .. entityBuilding.player.name
 			else
-				entityUID = "moving_" .. math.floor(entityBuilding.position.x) .. "_" .. math.floor(entityBuilding.position.y)
+				entityUID = "entity_" .. math.floor(entityBuilding.position.x) .. "_" .. math.floor(entityBuilding.position.y)
 			end
 		end
 	end
 
 	-- Ensure entity enters sfHealth tracking the first time it takes damage
 	if not storage.sfHealth[entityUID] then
-		-- Use the post-hit health + damage to accurately seed the first hit,
+		-- Use the post-hit health + damage to accurately seed the first hit
 		if finalHealth > 0 then
 			storage.sfHealth[entityUID] = finalHealth + finalDamage
 		else
@@ -471,13 +481,13 @@ local function entityStructureDamaged(entityBuilding, attackingEntity, attacking
 	local totalReducePercent = tileReducePercent + qualityReducePercent
 
 	if (attackingForce == entityBuilding.force) and attackingEntity then
-		if not SETTING.FriendlyDamageReduction then
+		if not Shared.SETTING.FriendlyDamageReduction then
 			tileReduceFlat = 0
 			totalReducePercent = 0
 		end
-		effectReduce = (damageType == "explosion" and SETTING.FriendlyExplosionDamage / 100
-			or damageType == "impact" and SETTING.FriendlyImpactDamage / 100
-			or damageType == "physical" and SETTING.FriendlyPhysicalDamage / 100 or effectReduce)
+		effectReduce = (damageType == "explosion" and Shared.SETTING.FriendlyExplosionDamage / 100
+			or damageType == "impact" and Shared.SETTING.FriendlyImpactDamage / 100
+			or damageType == "physical" and Shared.SETTING.FriendlyPhysicalDamage / 100 or effectReduce)
 	end
 
 	if totalReducePercent > 100 then totalReducePercent = 100 end
@@ -707,7 +717,7 @@ end
 script.on_event(defines.events.script_raised_set_tiles, handleScriptSetTiles)
 
 -- Periodic check & config
-script.on_nth_tick(SETTING.EntityTickRefresh, periodicEntityCheck)
+script.on_nth_tick(Shared.SETTING.EntityTickRefresh, periodicEntityCheck)
 
 script.on_configuration_changed(function(data)
 	local changes = data.mod_changes and data.mod_changes["StableFoundations"]
@@ -729,13 +739,13 @@ script.on_configuration_changed(function(data)
 		end
 	end
 
-	-- Wipe the tile reinforcement cache on config change.
+	-- Wipe the tile reinforcement cache on config change
 	tileReinforcementCache = {}
-	for tileName, tileRate in pairs(SF_TILES) do
+	for tileName, tileRate in pairs(Shared.SF_TILES) do
 		tileReinforcementCache[tileName] = tileRate
 	end
 
-	-- Re-resolve existing tracked entities against current tile coverage.
+	-- Re-resolve existing tracked entities against current tile coverage
 	if storage.sfEntity then
 		for uid, data in pairs(storage.sfEntity) do
 			local entity = data.entity
