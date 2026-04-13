@@ -180,7 +180,7 @@ end
 
 -- Whether to allow structure or unit reinforcement
 local function canReinforceBuilding(entityBuilding)
-	if not (entityBuilding and entityBuilding.valid and entityBuilding.minable and entityBuilding.destructible and entityBuilding.unit_number and entityBuilding.max_health > 0) then
+	if not (entityBuilding and entityBuilding.valid and entityBuilding.destructible and entityBuilding.max_health > 0) then
 		return false
 	end
 
@@ -189,7 +189,14 @@ local function canReinforceBuilding(entityBuilding)
 	local isWallEntity = entityBuilding.type == "wall" or entityBuilding.type == "gate"
 		or entityBuilding.name:find("wall") or entityBuilding.name:find("gate")
 
-	if isPlayer then return SETTING.ReinforcePlayers end
+	if isPlayer then
+		return SETTING.ReinforcePlayers
+	end
+
+	if not entityBuilding.minable then
+		return false
+	end
+
 	if not isBuilding then return SETTING.ReinforceUnits end
 	if isWallEntity then return SETTING.ReinforceWalls end
 	if entityBuilding.prototype.is_military_target then return SETTING.ReinforceMiltBuildings end
@@ -351,10 +358,15 @@ end
 
 local function clearBuildingReinforcement(surface, entityBuilding)
 	if not (surface and entityBuilding and entityBuilding.valid and entityBuilding.unit_number) then return end
+
+	local pos = entityBuilding.position
+
 	clearEntityTracking(entityBuilding.unit_number)
 	toggleInvulnerabilities(entityBuilding, true)
 	applyBuildingBonus(surface, entityBuilding, nil)
-	unmarkChunkIfEmpty(surface, entityBuilding.position)
+
+	-- Use the cached position here
+	unmarkChunkIfEmpty(surface, pos)
 end
 
 -- Check if structure is reinforced and apply appropriate changes
@@ -388,7 +400,8 @@ local function entityStructureReinforced(entityUser, tileList, tileType)
 	end
 
 	for _, entityBuilding in pairs(uniqueBuildings) do
-		if entityBuilding.valid then
+		-- Added canReinforceBuilding check so we ignore invisible beacons, items on belts, etc.
+		if entityBuilding.valid and canReinforceBuilding(entityBuilding) then
 			local reinforcedTile = getUniformReinforcedTile(mainSurface, entityBuilding)
 			if reinforcedTile then
 				getMatchingBuilding(entityUser, entityBuilding, reinforcedTile)
@@ -421,26 +434,30 @@ local function entityStructureDamaged(entityBuilding, attackingEntity, attacking
 		tileRate = entityData and entityData.tileRate
 		if not tileRate then return end
 	else
-		-- It's a moving unit (player, car, spidertron, robot)
+		-- Moving units live-check
 		local buildTileType = entityBuilding.surface.get_tile(entityBuilding.position)
 		if not buildTileType then return end
 		tileRate = getTileReinforcement(buildTileType.name)
+
 		if not tileRate then return end
 
-		-- Use a dummy UID for moving entities just so we can track their health within this tick/fight
 		if not entityUID then
-			-- If it's a character and controlled by a player, use the player's unique name
 			if entityBuilding.type == "character" and entityBuilding.player then
 				entityUID = "player_" .. entityBuilding.player.name
 			else
-				entityUID = "entity_" .. entityBuilding.unit_number
+				entityUID = "moving_" .. math.floor(entityBuilding.position.x) .. "_" .. math.floor(entityBuilding.position.y)
 			end
 		end
 	end
 
 	-- Ensure entity enters sfHealth tracking the first time it takes damage
 	if not storage.sfHealth[entityUID] then
-		storage.sfHealth[entityUID] = entityBuilding.max_health
+		-- Use the post-hit health + damage to accurately seed the first hit,
+		if finalHealth > 0 then
+			storage.sfHealth[entityUID] = finalHealth + finalDamage
+		else
+			storage.sfHealth[entityUID] = entityBuilding.max_health
+		end
 	end
 
 	toggleInvulnerabilities(entityBuilding, false)
@@ -469,15 +486,20 @@ local function entityStructureDamaged(entityBuilding, attackingEntity, attacking
 		1 / (tileReduceFlat - finalDamage + 2)
 	local mitigatedDamage = (finalFlatDamage * effectReduce) * (1 - (totalReducePercent / 100))
 
+	-- Use the safely cached pre-hit health
 	local preHealth = storage.sfHealth[entityUID]
-	local updatedHealth = (preHealth - mitigatedDamage) > 0 and (preHealth - mitigatedDamage) or 0
+	local updatedHealth = preHealth - mitigatedDamage
 
-	entityBuilding.health = updatedHealth
-
-	if updatedHealth <= 0 or updatedHealth >= entityBuilding.max_health then
-		storage.sfHealth[entityUID] = nil  -- Remove from damaged tracking
+	if updatedHealth > 0 then
+		entityBuilding.health = updatedHealth
+		if updatedHealth >= entityBuilding.max_health then
+			storage.sfHealth[entityUID] = nil
+		else
+			storage.sfHealth[entityUID] = updatedHealth
+		end
 	else
-		storage.sfHealth[entityUID] = updatedHealth
+		entityBuilding.health = 0
+		storage.sfHealth[entityUID] = nil
 	end
 end
 
@@ -495,6 +517,16 @@ local function handleScriptSetTiles(event)
 	if not surface then return end
 	if not (event.tiles and #event.tiles > 0) then return end
 
+	for _, tile in ipairs(event.tiles) do
+		local tileProto = surface.get_tile(tile.position).prototype
+		if tileProto and getTileReinforcement(tileProto.name) then
+			markChunkReinforced(surface, tile.position)
+		else
+			-- If it was overwritten with a normal tile, check if we need to unmark
+			unmarkChunkIfEmpty(surface, tile.position)
+		end
+	end
+
 	local uniqueBuildings = {}
 
 	for _, tile in ipairs(event.tiles) do
@@ -507,7 +539,7 @@ local function handleScriptSetTiles(event)
 	end
 
 	for _, entityBuilding in pairs(uniqueBuildings) do
-		if entityBuilding.valid then
+		if entityBuilding.valid and canReinforceBuilding(entityBuilding) then
 			local user = { surface = surface, force = entityBuilding.force }
 			local reinforcedTile = getUniformReinforcedTile(surface, entityBuilding)
 
@@ -636,6 +668,14 @@ end)
 
 local function handleTileBuilt(event)
 	local user = (event.player_index and game.players[event.player_index]) or event.robot
+	local surface = user and user.surface
+
+	if surface and event.tile and getTileReinforcement(event.tile.name) then
+		for _, tile in ipairs(event.tiles) do
+			markChunkReinforced(surface, tile.position)
+		end
+	end
+
 	entityStructureReinforced(user, event.tiles, event.tile)
 end
 

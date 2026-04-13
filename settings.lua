@@ -99,9 +99,9 @@ data:extend {
 		type = "int-setting",
 		name = "sf-entity-refresh",
 		setting_type = "startup",
-		default_value = 3,
+		default_value = 6,
 		minimum_value = 1,
-		maximum_value = 120,
+		maximum_value = 300,
 		order = "aha"
 	},
 	{
@@ -109,7 +109,7 @@ data:extend {
 		name = "sf-entity-tick-count",
 		setting_type = "startup",
 		default_value = 200,
-		minimum_value = 100,
+		minimum_value = 1,
 		maximum_value = 10000,
 		order = "ahb"
 	},

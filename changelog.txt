@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.3.5
+Date: 13. 04. 2026
+  Other:
+    - Adjusted default settings for entity refresh.
+  Bugfixes:
+    - Fixed an issue where placing/removing foundations would cause an invalid LuaEntity error.
+---------------------------------------------------------------------------------------------------
 Version: 1.3.4
 Date: 13. 04. 2026
   Balancing:
