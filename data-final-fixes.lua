@@ -129,6 +129,16 @@ if Shared.SETTING.BuildingBonusEffects then
 	end
 end
 
--- Extend the data dictionary with our new entities and items
-data:extend(bonus_modules)
-data:extend({ tile_beacon })
+local added_types = {}
+
+table.insert(added_types, tile_beacon)
+
+if #bonus_modules > 0 then
+    for _, mod in ipairs(bonus_modules) do
+        table.insert(added_types, mod)
+    end
+end
+
+if #added_types > 0 then
+    data:extend(added_types)
+end
