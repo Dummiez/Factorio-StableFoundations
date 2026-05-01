@@ -1,10 +1,27 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.3.7
+Date: 01. 05. 2026
+  Features:
+    - Added a reinforced text indicator when selecting reinforced structures and units with alt-mode enabled.
+    - Reinforced text indicator now displays the current damage reduction percentage.
+  Optimizations:
+    - Improved tile matching cache for more consistent foundation tier handling.
+    - Improved damage and repair tracking for moving units and players on foundations.
+    - Added damage event filtering to reduce unnecessary damage checks.
+  Compatibility:
+    - Re-added blacklist handling for foundation bonus effects.
+    - Improved handling for empty startup setting lists.
+  Bugfixes:
+    - Fixed an issue where safe foundation entities could stay indestructible after foundations were removed.
+    - Fixed an issue where overlapping tile names could receive inconsistent foundation tiers.
+    - Fixed reinforced text indicators not updating correctly for moving entities.
+---------------------------------------------------------------------------------------------------
 Version: 1.3.6
 Date: 26. 04. 2026
   Translation:
     - Added Polish (provided by S3BA).
   Bugfixes:
-    - Fixed a startup crash issue with mod settings.
+    - Fixed an issue with configuring startup settings that are empty.
 ---------------------------------------------------------------------------------------------------
 Version: 1.3.5
 Date: 13. 04. 2026

@@ -9,33 +9,45 @@ end
 
 -- Parse the bonus production value strings
 function Shared.parseBonus(bonusSetting, tierIndex)
-	local defaultValues = bonusSetting.default_value
 	local numbers = {}
+	local source = bonusSetting.value
 
 	-- Find all numbers in the string (including those with decimals)
-	for num in string.gmatch(bonusSetting.value, "[%d%.]+") do
-		table.insert(numbers, Shared.clamp(math.floor(tonumber(num) + 0.5), 0, 200))
+	for num in tostring(source):gmatch("[%d%.]+") do
+		local value = tonumber(num)
+		if value then
+			table.insert(numbers, Shared.clamp(math.floor(value + 0.5), 0, 200))
+		end
 	end
 
-	if not numbers or #numbers == 0 then
-		return defaultValues[tierIndex]
+	if #numbers == 0 then
+		for num in tostring(bonusSetting.default_value):gmatch("[%d%.]+") do
+			local value = tonumber(num)
+			if value then
+				table.insert(numbers, Shared.clamp(math.floor(value + 0.5), 0, 200))
+			end
+		end
 	end
 
-	return #numbers < 3 and numbers[1] or numbers[tierIndex]
+	return #numbers < 3 and numbers[1] or numbers[tierIndex] or numbers[#numbers] or 0
 end
 
 -- Parse the tile value strings
 function Shared.parseTiles(tileSetting)
 	local tiles = {}
+	local source = tileSetting.value
 
 	-- Check if tileSetting.value is empty or contains only whitespace
-	if not tileSetting.value or tileSetting.value:match('^%s*$') then
-		return { tileSetting.default_value }
+	if not source or source:match('^%s*$') then
+		source = tileSetting.default_value
 	end
 
 	-- Find all words separated by commas
-	for tile in tileSetting.value:gmatch('([^,%s]+)') do
-		tiles[#tiles + 1] = tile:match('^%s*(.-)%s*$')
+	for tile in tostring(source):gmatch('([^,]+)') do
+		local trimmed = tile:match('^%s*(.-)%s*$')
+		if trimmed ~= "" then
+			tiles[#tiles + 1] = trimmed
+		end
 	end
 
 	return tiles
@@ -88,6 +100,18 @@ Shared.SF_NAMES = {
 }
 
 Shared.SF_TILES = {}
+
+Shared.BUILDING_EXCLUDE_SET = {}
+
+for _, name in ipairs(Shared.parseTiles(Shared.SETTING.BuildingExcludeList)) do
+	Shared.BUILDING_EXCLUDE_SET[name] = true
+end
+
+function Shared.isBuildingBonusExcluded(object)
+	return object
+		and (Shared.BUILDING_EXCLUDE_SET[object.name]
+			or Shared.BUILDING_EXCLUDE_SET[object.type])
+end
 
 -- Store foundation tiles into the list
 for index, tier in ipairs(Shared.SF_NAMES) do

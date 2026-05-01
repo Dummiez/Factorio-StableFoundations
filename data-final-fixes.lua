@@ -120,8 +120,10 @@ if Shared.SETTING.BuildingBonusEffects then
 		for _, dataType in pairs(allowedTypes) do
 			if data.raw[dataType] then
 				for _, dataObject in pairs(data.raw[dataType]) do
-					for _, effect in pairs(extraEffects) do
-						updateAllowedEffects(dataObject, effect)
+					if not Shared.isBuildingBonusExcluded(dataObject) then
+						for _, effect in pairs(extraEffects) do
+							updateAllowedEffects(dataObject, effect)
+						end
 					end
 				end
 			end
