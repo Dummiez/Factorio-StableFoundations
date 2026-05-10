@@ -1,4 +1,49 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.5.1
+Date: 10. 05. 2026
+  Features:
+    - Added support for Space Exploration and Beacons Rebalance mod. Beacon overload mechanics should now be handled among most other mods that modify this.
+---------------------------------------------------------------------------------------------------
+Version: 1.5.0
+Date: 08. 05. 2026
+  Features:
+    - Added damage reduction cap setting (default limit 90%). Does not apply to friendly damage.
+  Optimizations:
+    - Batched chunk mark/unmark for tile placement and removal events; bulk landfill or concrete operations now scan each affected chunk at most once.
+    - Entity searches around newly placed tiles now filter by force, skipping trees, rocks, particles, and enemy structures.
+    - Throttled damaging area-of-effect near reinforced structures for performance improvements, each affected entity triggers at most one scan per second.
+    - Removed redundant beacon search from the building-bonus hot path; orphan recovery now runs only on configuration changes.
+    - Removed periodic tile-coverage rescan that was running surface.count_tiles_filtered for every multi-tile reinforced building each cycle; tile coverage is now strictly event-driven.
+  Balancing:
+    - Lowered default values for entity scan refresh rate and entities-per-scan to reduce idle overhead. Existing saves keep their previous values; new installs get the new defaults.
+  Changes:
+    - Tile and entity name patterns now use word-boundary matching so e.g. "stone" no longer matches "limestone" by accident. Use * (e.g. *stone*, wood-*, *floor) for substring or prefix/suffix matches.
+    - Refactored the runtime control script into focused helper modules under scripts/ for damage handling, reinforcement checks, tile tracking, invulnerability overrides, selection indicators, beacon bonuses, and shared state/config setup.
+  Bugfixes:
+    - Buildings whose tiles get destroyed by area-of-effect weapons (e.g. atom bombs) no longer keep stale reinforcement bonuses.
+    - Position-based fallback UIDs now include surface index, fixing health-tracking collisions for non-unit entities sharing a position across surfaces.
+    - Player UIDs now use player index instead of name, avoiding stale entries on rename (for those who play offline/locally).
+    - Fixed an issue where segmented enemies would receive damage reduction on tiles.
+  Other:
+    - Optional dependency for Concrete in Space to allow reinforcing of structures on platforms.
+---------------------------------------------------------------------------------------------------
+Version: 1.4.0
+Date: 06. 05. 2026
+  Features:
+    - Added support for Space Platform Foundations (See Concrete In Space)
+---------------------------------------------------------------------------------------------------
+Version: 1.3.9
+Date: 03. 05. 2026
+  Bugfixes:
+    - Fixed a translation issue.
+---------------------------------------------------------------------------------------------------
+Version: 1.3.8
+Date: 02. 05. 2026
+  Modding:
+    - Added remote.call("damage-indicator", "record_external_damage_reduction", {source, entity, tick, original_damage, final_damage, reduced_damage, damage_type}) to support other mods that require checking damage modifications.
+  Bugfixes:
+    - Fixed an issue that would incorrectly match entities to the invulnerability list for rails/lights/poles.
+---------------------------------------------------------------------------------------------------
 Version: 1.3.7
 Date: 01. 05. 2026
   Features:
@@ -11,6 +56,7 @@ Date: 01. 05. 2026
   Compatibility:
     - Re-added blacklist handling for foundation bonus effects.
     - Improved handling for empty startup setting lists.
+    - Report mitigated damage to Damage Indicator when that mod is active, allowing popups like 50 (-50).
   Bugfixes:
     - Fixed an issue where safe foundation entities could stay indestructible after foundations were removed.
     - Fixed an issue where overlapping tile names could receive inconsistent foundation tiers.

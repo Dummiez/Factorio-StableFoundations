@@ -60,20 +60,23 @@ Shared.SETTING = {
 	FriendlyPhysicalDamage  = settings.startup["sf-friendly-physical-reduction"].value,
 	FriendlyExplosionDamage = settings.startup["sf-friendly-explosion-reduction"].value,
 	FriendlyImpactDamage    = settings.startup["sf-friendly-impact-reduction"].value,
+	FriendlyOtherDamage     = settings.startup["sf-friendly-other-reduction"].value,
 	ReinforceMiltBuildings  = settings.startup["sf-military-target-toggle"].value,
 	ReinforceWalls          = settings.startup["sf-reinforce-wall-toggle"].value,
 	ReinforceUnits          = settings.startup["sf-reinforce-units-toggle"].value,
 	ReinforcePlayers        = settings.startup["sf-reinforce-players-toggle"].value,
 	ReinforceQuality        = settings.startup["sf-quality-damage-reduction"].value,
+	MaxReductionPercent     = settings.startup["sf-max-reduction-percent"].value,
 	SafePoles               = settings.startup["sf-invulnerable-poles-toggle"].value,
 	SafeRails               = settings.startup["sf-invulnerable-rails-toggle"].value,
 	SafeLights              = settings.startup["sf-invulnerable-lamps-toggle"].value,
 	EntityRefreshCount      = settings.startup["sf-entity-tick-count"].value,
 	EntityTickRefresh       = settings.startup["sf-entity-refresh"].value,
+	SmokeCleanupEnabled     = settings.startup["sf-smoke-cleanup-toggle"].value,
 	BuildingBonusEffects    = settings.startup["sf-building-bonus-toggle"].value,
 	BuildingBonusList       = settings.startup["sf-list-bonus"],
 	BuildingExcludeList     = settings.startup["sf-list-exclude"],
-	IdentifiedList          = {"default"}
+	IdentifiedList          = { "default" }
 }
 
 -- Setting names map

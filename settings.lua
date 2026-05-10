@@ -71,7 +71,21 @@ data:extend {
 		name = "sf-invulnerable-lamps-toggle",
 		setting_type = "startup",
 		default_value = false,
-		order = "ah"
+		order = "ah0"
+	},
+	{
+		type = "bool-setting",
+		name = "sf-smoke-cleanup-toggle",
+		setting_type = "startup",
+		default_value = true,
+		order = "ah1"
+	},
+	{
+		type = "bool-setting",
+		name = "sf-particle-reduction-toggle",
+		setting_type = "startup",
+		default_value = true,
+		order = "ah2"
 	},
 	-- {
 	-- 	type = "bool-setting",
@@ -102,16 +116,16 @@ data:extend {
 		default_value = 6,
 		minimum_value = 1,
 		maximum_value = 300,
-		order = "aha"
+		order = "ai"
 	},
 	{
 		type = "int-setting",
 		name = "sf-entity-tick-count",
 		setting_type = "startup",
-		default_value = 300,
+		default_value = 200,
 		minimum_value = 1,
 		maximum_value = 10000,
-		order = "ahb"
+		order = "aj"
 	},
 	{
 		type = "int-setting",
@@ -120,7 +134,16 @@ data:extend {
 		default_value = 5,
 		minimum_value = -10,
 		maximum_value = 10,
-		order = "ahc"
+		order = "ak"
+	},
+	{
+		type = "int-setting",
+		name = "sf-max-reduction-percent",
+		setting_type = "startup",
+		default_value = 90,
+		minimum_value = 10,
+		maximum_value = 100,
+		order = "ak1"
 	},
 	{
 		type = "string-setting",
@@ -169,6 +192,15 @@ data:extend {
 		minimum_value = -100,
 		maximum_value = 200,
 		order = "bc"
+	},
+	{
+		type = "int-setting",
+		name = "sf-friendly-other-reduction",
+		setting_type = "startup",
+		default_value = 100,
+		minimum_value = -100,
+		maximum_value = 200,
+		order = "bd"
 	},
 	{
 		type = "int-setting",
