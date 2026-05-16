@@ -1,5 +1,13 @@
 return function(Shared, State, Tiles, Invulnerability, BuildingBonus, Indicators)
 	local Reinforcement = {}
+	local MAX_POST_BUILD_RECHECK_AGE_TICKS = 10
+
+	local SE_SWAP_SUFFIXES = {
+		"-grounded",
+		"-spaced",
+		"-_-grounded",
+		"-_-spaced"
+	}
 
 	-- Note: no periodic tile-coverage scan here. Tile coverage is event-driven via
 	-- on_player/robot/space_platform_built_tile, on_*_mined_tile, and
@@ -46,6 +54,121 @@ return function(Shared, State, Tiles, Invulnerability, BuildingBonus, Indicators
 		end
 	end
 
+	local function addCandidateName(names, seen, name)
+		if name and not seen[name] and prototypes.entity[name] then
+			names[#names + 1] = name
+			seen[name] = true
+		end
+	end
+
+	local function getSwapCandidateNames(baseName)
+		local names, seen = {}, {}
+		addCandidateName(names, seen, baseName)
+
+		for _, suffix in ipairs(SE_SWAP_SUFFIXES) do
+			addCandidateName(names, seen, baseName .. suffix)
+
+			if string.sub(baseName, -#suffix) == suffix then
+				addCandidateName(names, seen, string.sub(baseName, 1, #baseName - #suffix))
+			end
+		end
+
+		return names
+	end
+
+	local function mayBeSpaceExplorationSwapCandidate(entity)
+		if not script.active_mods["space-exploration"] then return false end
+		if not (entity and entity.valid and entity.name and entity.unit_number) then return false end
+
+		for _, suffix in ipairs(SE_SWAP_SUFFIXES) do
+			if prototypes.entity[entity.name .. suffix]
+				or string.sub(entity.name, -#suffix) == suffix then
+				return true
+			end
+		end
+
+		return false
+	end
+
+	local function reactivateSwappedEntity(entity)
+		entity.active = true
+		pcall(function()
+			if entity.disabled_by_script then
+				entity.disabled_by_script = false
+			end
+		end)
+	end
+
+	function Reinforcement.queuePostBuildRecheck(entity)
+		if not mayBeSpaceExplorationSwapCandidate(entity) then return end
+		if not storage.sfPostBuildRecheckQueue then State.initGlobalProperties() end
+
+		storage.sfPostBuildRecheckQueue[#storage.sfPostBuildRecheckQueue + 1] = {
+			surface_index = entity.surface.index,
+			position = { x = entity.position.x, y = entity.position.y },
+			force_name = entity.force.name,
+			name = entity.name,
+			unit_number = entity.unit_number,
+			tick = game.tick
+		}
+	end
+
+	function Reinforcement.processPostBuildRecheckQueue()
+		local queue = storage.sfPostBuildRecheckQueue
+		if not (queue and #queue > 0) then return end
+
+		storage.sfPostBuildRecheckQueue = {}
+
+		for _, entry in ipairs(queue) do
+			local isFresh = not entry.tick or (game.tick - entry.tick) <= MAX_POST_BUILD_RECHECK_AGE_TICKS
+			local surface = isFresh and game.surfaces[entry.surface_index]
+			local force = isFresh and game.forces[entry.force_name]
+			if surface and force then
+				local names = getSwapCandidateNames(entry.name)
+				local candidates = surface.find_entities_filtered {
+					name = names,
+					position = entry.position,
+					radius = 0.5,
+					force = force
+				}
+
+				local replacement
+				for _, candidate in pairs(candidates) do
+					if candidate.valid and candidate.unit_number then
+						if candidate.unit_number ~= entry.unit_number then
+							replacement = candidate
+							break
+						end
+						replacement = replacement or candidate
+					end
+				end
+
+				if replacement and replacement.valid then
+					if entry.unit_number and replacement.unit_number ~= entry.unit_number then
+						State.clearEntityTracking(entry.unit_number)
+						local transferredBonus = BuildingBonus.transferBonusBeacon(entry.unit_number, replacement.unit_number)
+						if transferredBonus then
+							reactivateSwappedEntity(replacement)
+						end
+
+						Reinforcement.entityStructureReinforced(
+							{ surface = surface, force = replacement.force },
+							nil,
+							replacement
+						)
+					end
+				elseif entry.unit_number then
+					local tracked = storage.sfEntity and storage.sfEntity[entry.unit_number]
+					local trackedEntity = tracked and tracked.entity
+					if tracked and not (trackedEntity and trackedEntity.valid) then
+						State.clearEntityTracking(entry.unit_number)
+						BuildingBonus.destroyBonusBeacon(entry.unit_number)
+					end
+				end
+			end
+		end
+	end
+
 	function Reinforcement.clearBuildingReinforcement(surface, entityBuilding)
 		if not (surface and entityBuilding and entityBuilding.valid and entityBuilding.unit_number) then return end
 
@@ -79,17 +202,51 @@ return function(Shared, State, Tiles, Invulnerability, BuildingBonus, Indicators
 		end
 
 		-- Pre-filter by force so trees, rocks, particles, and enemy structures don't enter the candidate set.
+		-- For dense tile events (landfill blueprint, large stone paving), one area
+		-- scan over the union bounding-box is dramatically cheaper than N per-tile
+		-- scans. For sparse events (scattered tiles), the per-tile path is cheaper
+		-- because the union bbox is mostly empty. Switch based on tile density.
 		local userForce = entityUser.force
 		local uniqueBuildings = {}
 
-		for _, eventTile in ipairs(tileList) do
-			local findEntityArea = Tiles.getTileSearchArea(eventTile.position)
+		local tileCount = #tileList
+		local useUnionScan = false
+		local minX, minY, maxX, maxY = 0, 0, 0, 0
+		if tileCount >= 8 then
+			minX, minY = math.huge, math.huge
+			maxX, maxY = -math.huge, -math.huge
+			for _, eventTile in ipairs(tileList) do
+				local p = eventTile.position
+				if p.x < minX then minX = p.x end
+				if p.y < minY then minY = p.y end
+				if p.x > maxX then maxX = p.x end
+				if p.y > maxY then maxY = p.y end
+			end
+			local unionArea = (maxX - minX + 1) * (maxY - minY + 1)
+			-- Use union scan when tile density >= 25% of the bbox (heuristic break-even).
+			useUnionScan = (tileCount * 4) >= unionArea
+		end
+
+		if useUnionScan then
+			local unionArea = { { minX, minY }, { maxX + 1, maxY + 1 } }
 			local found = userForce
-				and mainSurface.find_entities_filtered { area = findEntityArea, force = userForce }
-				or mainSurface.find_entities(findEntityArea)
+				and mainSurface.find_entities_filtered { area = unionArea, force = userForce }
+				or mainSurface.find_entities(unionArea)
 			for _, entityBuilding in pairs(found) do
 				if entityBuilding.valid and entityBuilding.unit_number then
 					uniqueBuildings[entityBuilding.unit_number] = entityBuilding
+				end
+			end
+		else
+			for _, eventTile in ipairs(tileList) do
+				local findEntityArea = Tiles.getTileSearchArea(eventTile.position)
+				local found = userForce
+					and mainSurface.find_entities_filtered { area = findEntityArea, force = userForce }
+					or mainSurface.find_entities(findEntityArea)
+				for _, entityBuilding in pairs(found) do
+					if entityBuilding.valid and entityBuilding.unit_number then
+						uniqueBuildings[entityBuilding.unit_number] = entityBuilding
+					end
 				end
 			end
 		end
@@ -142,13 +299,40 @@ return function(Shared, State, Tiles, Invulnerability, BuildingBonus, Indicators
 		Tiles.markChunksFromTiles(surface, reinforcementTiles)
 		Tiles.unmarkChunksIfEmpty(surface, otherTiles, markedChunks)
 
+		-- Same union-bbox vs per-tile heuristic as in entityStructureReinforced.
 		local uniqueBuildings = {}
 
-		for _, tile in ipairs(event.tiles) do
-			local findArea = Tiles.getTileSearchArea(tile.position)
-			for _, entityBuilding in pairs(surface.find_entities(findArea)) do
+		local tileCount = #event.tiles
+		local useUnionScan = false
+		local minX, minY, maxX, maxY = 0, 0, 0, 0
+		if tileCount >= 8 then
+			minX, minY = math.huge, math.huge
+			maxX, maxY = -math.huge, -math.huge
+			for _, tile in ipairs(event.tiles) do
+				local p = tile.position
+				if p.x < minX then minX = p.x end
+				if p.y < minY then minY = p.y end
+				if p.x > maxX then maxX = p.x end
+				if p.y > maxY then maxY = p.y end
+			end
+			local unionArea = (maxX - minX + 1) * (maxY - minY + 1)
+			useUnionScan = (tileCount * 4) >= unionArea
+		end
+
+		if useUnionScan then
+			local unionArea = { { minX, minY }, { maxX + 1, maxY + 1 } }
+			for _, entityBuilding in pairs(surface.find_entities(unionArea)) do
 				if entityBuilding.valid and entityBuilding.unit_number then
 					uniqueBuildings[entityBuilding.unit_number] = entityBuilding
+				end
+			end
+		else
+			for _, tile in ipairs(event.tiles) do
+				local findArea = Tiles.getTileSearchArea(tile.position)
+				for _, entityBuilding in pairs(surface.find_entities(findArea)) do
+					if entityBuilding.valid and entityBuilding.unit_number then
+						uniqueBuildings[entityBuilding.unit_number] = entityBuilding
+					end
 				end
 			end
 		end

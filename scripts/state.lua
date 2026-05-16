@@ -12,6 +12,7 @@ function State.initGlobalProperties()
 	storage.sfSmokeCleanupTick = storage.sfSmokeCleanupTick or {}
 	storage.sfLastDamageReportCleanup = storage.sfLastDamageReportCleanup or 0
 	storage.sfSeReNotifyQueue = storage.sfSeReNotifyQueue or {}
+	storage.sfPostBuildRecheckQueue = storage.sfPostBuildRecheckQueue or {}
 end
 
 function State.clearHealthTracking(entityUID)

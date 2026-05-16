@@ -36,12 +36,14 @@ end)
 -- script-raised events and cloning which carry no player/robot.
 local function handleEntityBuilt(event)
 	local entity = event.destination_entity or event.entity
+
 	if not (entity and entity.valid) then return end
 
 	local user = (event.player_index and game.players[event.player_index])
 		or event.robot
 		or { surface = entity.surface, force = entity.force }
 
+	Reinforcement.queuePostBuildRecheck(entity)
 	Reinforcement.entityStructureReinforced(user, nil, entity)
 end
 
@@ -275,12 +277,32 @@ else
 	script.on_nth_tick(SF_INDICATOR_REFRESH_TICKS, Indicators.refreshMovableSelectionIndicators)
 end
 
--- Space Exploration compatibility: drain the deferred SE re-notify queue every
--- tick. Each entry was added by notifySpaceExplorationBeaconException after a
--- beacon-related event; this second call defeats handler-order races where SE
--- re-applies overload after our initial remote call. Cheap when queue is empty.
-if script.active_mods["space-exploration"] then
+-- Per-tick cross-mod compatibility work. Two responsibilities:
+--   1. Drain the SE re-notify queue (handler-order race protection for SE).
+--   2. On the first tick of each session, re-register the Beacon Rebalance
+--      whitelist for "sf-tile-bonus". Rebalance keeps its whitelist in a Lua
+--      local that's reset every script load; without this, after a save load
+--      rebalance counts our hidden beacon as a real overloader and refuses to
+--      clear the overload state when a real beacon is removed nearby.
+--      We do this on the first tick (not on_load) because remote.call is not
+--      multiplayer-safe from on_load.
+-- The handler is only registered when at least one of those mods is present.
+-- sfFirstTickDone is a module-local (not storage) so it resets on every script
+-- load — exactly what we need to mirror rebalance's local-whitelist reset.
+local sfFirstTickDone = false
+
+local function hasRelevantBeaconMod()
+	return script.active_mods["space-exploration"]
+		or script.active_mods["wret-beacon-rebalance-mod"]
+end
+
+if hasRelevantBeaconMod() then
 	script.on_event(defines.events.on_tick, function()
+		if not sfFirstTickDone then
+			Config.loadGameConfigs()
+			sfFirstTickDone = true
+		end
+		Reinforcement.processPostBuildRecheckQueue()
 		BuildingBonus.processSeReNotifyQueue()
 	end)
 end

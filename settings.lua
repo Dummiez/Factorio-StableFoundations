@@ -113,7 +113,7 @@ data:extend {
 		type = "int-setting",
 		name = "sf-entity-refresh",
 		setting_type = "startup",
-		default_value = 6,
+		default_value = 12,
 		minimum_value = 1,
 		maximum_value = 300,
 		order = "ai"
@@ -124,7 +124,7 @@ data:extend {
 		setting_type = "startup",
 		default_value = 200,
 		minimum_value = 1,
-		maximum_value = 10000,
+		maximum_value = 1000,
 		order = "aj"
 	},
 	{

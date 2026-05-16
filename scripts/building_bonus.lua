@@ -56,6 +56,28 @@ return function(Shared, Tiles)
 	-- request SE re-validation for a receiver after a nearby beacon event.
 	BuildingBonus.notifySpaceExplorationBeaconException = notifySpaceExplorationBeaconException
 
+	function BuildingBonus.transferBonusBeacon(oldUid, newUid)
+		if not (oldUid and newUid and oldUid ~= newUid and storage.bonusBeacons) then return end
+
+		local beacon = storage.bonusBeacons[oldUid]
+		if beacon and beacon.valid then
+			storage.bonusBeacons[newUid] = beacon
+			storage.bonusBeacons[oldUid] = nil
+			return true
+		end
+		storage.bonusBeacons[oldUid] = nil
+	end
+
+	function BuildingBonus.destroyBonusBeacon(uid)
+		if not (uid and storage.bonusBeacons) then return end
+
+		local beacon = storage.bonusBeacons[uid]
+		if beacon and beacon.valid then
+			beacon.destroy()
+		end
+		storage.bonusBeacons[uid] = nil
+	end
+
 	local function removeAllModules(entity)
 		local moduleInventory = entity.get_module_inventory()
 		if not moduleInventory or moduleInventory.is_empty() then return end
@@ -107,6 +129,15 @@ return function(Shared, Tiles)
 		end
 
 		if Shared.isBuildingBonusExcluded(entity) then
+			BuildingBonus.removeBuildingBonus(entity)
+			return
+		end
+		-- Skip beacons entirely. Beacons have allowed_effects (for the modules they
+		-- transmit) but don't receive external beacon effects, so a hidden bonus
+		-- beacon on top of one does nothing useful. It also confuses overload
+		-- mechanics in SE / Beacon Rebalance which then incorrectly treat the
+		-- real beacon as part of an overloaded group.
+		if entity.type == "beacon" then
 			BuildingBonus.removeBuildingBonus(entity)
 			return
 		end

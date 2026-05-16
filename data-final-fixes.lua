@@ -56,35 +56,25 @@ if mods["space-exploration"] then
 	tile_beacon.se_allow_productivity_in_space = true
 end
 
--- Beacon overload mod compatibility: several mods (Beacon Rebalance, Space
--- Exploration, etc.) set profile = {1, 0} on beacons to enforce a single-beacon-
--- per-machine rule via diminishing returns. That same mechanic also zeroes out
--- the player's beacon when our hidden sf-tile-bonus beacon is also affecting the
--- receiver. Sweep every beacon prototype and replace zero entries in profile
--- arrays with 1 so additional beacons (specifically our hidden sf-tile-bonus)
--- don't collapse the effect. Each mod's runtime overload script still enforces
--- its single-beacon rule by disabling the receiver, so this only changes the
--- effect-stacking math, not the gameplay rule.
+-- Beacon overload mod compatibility: several mods (Space Exploration, Beacon
+-- Rebalance, etc.) use profile = {1, 0} to make the second beacon provide no
+-- effect. Our hidden sf-tile-bonus beacon should not consume that profile slot.
+-- In SE games, make each beacon pick profile samples from its own prototype
+-- count instead of the total beacon count. SE's runtime overload validator still
+-- counts all real beacons and disables overloaded receivers; Stable Foundations
+-- separately asks SE to ignore only sf-tile-bonus.
 if data.raw["beacon"] then
 	for _, beacon_proto in pairs(data.raw["beacon"]) do
+		if mods["space-exploration"] then
+			beacon_proto.beacon_counter = "same_type"
+		end
+
 		if beacon_proto.profile then
 			for i = 1, #beacon_proto.profile do
 				if beacon_proto.profile[i] == 0 then
 					beacon_proto.profile[i] = 1
 				end
 			end
-		end
-	end
-end
-
--- TEMPORARY DEBUG: log the patched profiles for SE beacons
-if mods["space-exploration"] then
-	for _, name in pairs({ "se-wide-beacon", "se-compact-beacon", "se-compact-beacon-2" }) do
-		local p = data.raw["beacon"] and data.raw["beacon"][name]
-		if p then
-			log("[StableFoundations DEBUG] " .. name .. " profile = " .. serpent.line(p.profile))
-		else
-			log("[StableFoundations DEBUG] " .. name .. " NOT FOUND in data.raw.beacon")
 		end
 	end
 end

@@ -1,4 +1,25 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.5.3
+Date: 16. 05. 2026
+  Compatibility:
+    - Improved Space Exploration support for structures that are swapped to grounded/spaced variants after placement.
+    - Space Exploration beacon profile handling now ignores the hidden sf-tile-bonus beacon for player beacon effect scaling while leaving Space Exploration's real beacon overload rules intact.
+  Bugfixes:
+    - Fixed Space Exploration grounded machines, such as se-space-assembling-machine-grounded on spaceship floors, losing damage reinforcement after placement.
+    - Fixed hidden tile bonus beacons being left attached to destroyed pre-swap entities after Space Exploration replaced them with grounded/spaced variants.
+    - Fixed Space Exploration machines sometimes staying disabled by script from beacon overload after a grounded/spaced swap.
+    - Fixed normal and wide beacons losing their module effects on reinforced concrete or spaceship floors when the hidden sf-tile-bonus beacon was also affecting the machine.
+  Changes:
+    - Removed the hidden optional Space Exploration dependency; runtime and data-stage compatibility now remain guarded by active mod checks instead of forcing load-order coupling.
+---------------------------------------------------------------------------------------------------
+Version: 1.5.2
+Date: 11. 05. 2026
+  Optimizations:
+    - Bulk tile events now use a single union-area find_entities_filtered call when tiles are dense (≥8 tiles, ≥25% bbox density), falling back to per-tile scans otherwise.
+  Bugfixes:
+    - Fixed an issue where beacon would overload each other when within another's effect range.
+    - Fixed an issue where beacons overload mechanics for modded playthroughs would not get properly removed (Beacon Rebalance).
+---------------------------------------------------------------------------------------------------
 Version: 1.5.1
 Date: 10. 05. 2026
   Features:
