@@ -36,6 +36,20 @@ return function(Shared, Tiles, Invulnerability)
 		return reduction > maxPercent and maxPercent or reduction
 	end
 
+	local function setEntityTooltipBonus(entity, tileRate)
+		if not (entity and entity.valid and entity.set_tooltip_field) then return end
+		local pct = getIndicatorReductionPercent(entity, tileRate)
+		local label = Invulnerability.isOwnedSafeOverride(entity)
+			and "SF: invulnerable"
+			or "SF: -" .. pct .. "% dmg"
+		entity.set_tooltip_field("sf-bonus", label)
+	end
+
+	local function clearEntityTooltipBonus(entity)
+		if not (entity and entity.valid and entity.clear_tooltip_field) then return end
+		entity.clear_tooltip_field("sf-bonus")
+	end
+
 	function Indicators.getReinforcedTextOffset(entity)
 		local _, _, _, _, _, height = Tiles.getBoundingBox(entity)
 		return { 0, -math.max(0.8, (height / 2) + 0.35) }
@@ -95,6 +109,13 @@ return function(Shared, Tiles, Invulnerability)
 				Indicators.updateSelectionIndicator(player)
 			end
 		end
+		-- NEW: sync tooltip field
+		local tileRate = getSelectedEntityTileRate(entity)
+		if tileRate then
+			setEntityTooltipBonus(entity, tileRate)
+		else
+			clearEntityTooltipBonus(entity)
+		end
 	end
 
 	function Indicators.refreshMovableSelectionIndicators()
@@ -122,6 +143,6 @@ return function(Shared, Tiles, Invulnerability)
 			end
 		end
 	end
-
+	Indicators.clearEntityTooltipBonus = clearEntityTooltipBonus
 	return Indicators
 end

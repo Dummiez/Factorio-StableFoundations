@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.6.0
+Date: 27. 06. 2026
+  Features:
+    - Added tooltips for reinforcement indicators.
+  Compatibility:
+    - Added support for version 2.1
+---------------------------------------------------------------------------------------------------
 Version: 1.5.3
 Date: 16. 05. 2026
   Compatibility:

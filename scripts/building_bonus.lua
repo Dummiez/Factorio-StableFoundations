@@ -164,7 +164,7 @@ return function(Shared, Tiles)
 					force = entity.force
 				}
 				beacon.destructible = false
-				beacon.minable = false
+				beacon.minable_flag = false -- beacon.minable = false
 				beacon.operable = false
 				moduleInventory = beacon.get_module_inventory()
 				storage.bonusBeacons[uid] = beacon

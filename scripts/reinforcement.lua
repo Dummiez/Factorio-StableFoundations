@@ -91,7 +91,7 @@ return function(Shared, State, Tiles, Invulnerability, BuildingBonus, Indicators
 	end
 
 	local function reactivateSwappedEntity(entity)
-		entity.active = true
+		entity.disabled_by_script = false -- previously entity.active
 		pcall(function()
 			if entity.disabled_by_script then
 				entity.disabled_by_script = false
@@ -178,7 +178,8 @@ return function(Shared, State, Tiles, Invulnerability, BuildingBonus, Indicators
 		State.clearEntityTracking(entityBuilding.unit_number)
 		BuildingBonus.applyBuildingBonus(surface, entityBuilding, nil)
 		Indicators.refreshSelectionIndicatorsForEntity(entityBuilding)
-
+		Indicators.clearEntityTooltipBonus(entityBuilding)
+		
 		Tiles.unmarkChunkIfEmpty(surface, pos)
 	end
 

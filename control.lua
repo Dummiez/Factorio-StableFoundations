@@ -265,6 +265,16 @@ end
 
 script.on_event(defines.events.script_raised_set_tiles, Reinforcement.handleScriptSetTiles)
 
+script.on_event(defines.events.on_player_rotated_entity, function(event)
+	local entity = event.entity
+	if not (entity and entity.valid) then return end
+	Reinforcement.entityStructureReinforced(
+		{ surface = entity.surface, force = entity.force },
+		nil,
+		entity
+	)
+end)
+
 -- Factorio allows one on_nth_tick handler per interval per mod, so merge the
 -- handlers when the user setting happens to equal the indicator refresh rate.
 if Shared.SETTING.EntityTickRefresh == SF_INDICATOR_REFRESH_TICKS then
