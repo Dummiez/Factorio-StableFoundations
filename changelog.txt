@@ -1,4 +1,50 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.6.3
+Date: 03. 10. 2026
+  Bugfixes:
+    - Fixed multiplayer joins failing with an on_tick script-event mismatch when Space Exploration is not enabled.
+    - Keep the compatibility tick handler registered across save/load and multiplayer joins while preserving the first-tick Beacon Rebalance and Damage Indicator refresh.
+    - Damage Indicator availability now resolves on first use, so a damage event before a joining client's first tick cannot skip a notification the server sends.
+    - Tile placement and removal by players now use the event's surface instead of the player's current surface, fixing reinforcement updates from remote view or the map editor.
+---------------------------------------------------------------------------------------------------
+Version: 1.6.2
+Date: 01. 10. 2026
+  Features:
+    - Added /stable-foundations-prepare-removal to remove foundation tooltips and hidden bonus beacons, restore owned invulnerability overrides, and suspend reinforcement before saving and removing the mod.
+  Bugfixes:
+    - Foundation tooltip updates now recover copied or untracked fields and remove duplicates without changing other mods' tooltip fields.
+    - Adding or updating the mod now cleans orphaned Foundation tooltip fields left in existing saves.
+    - Damage reduction now uses live health, preserving repairs and other mods' health changes instead of reviving damaged buildings from stale cached health. Hits already fatal in Factorio retain their fatal outcome.
+    - Existing structures are reinforced when the mod is added, and startup setting changes refresh saved tooltip percentages.
+    - Protected clones and Space Exploration replacements retain ownership records so their original destructibility can be restored.
+    - Silently destroyed entities now remove their hidden bonus beacons and tracking records.
+    - Silent interior floor changes are checked across the full footprint on damage, bounded to once per second per building.
+    - Beacon compatibility no longer clears unrelated script disables, and Space Exploration is told to ignore zero hidden beacons after their removal.
+    - Fixed save reloads losing damage-indicator notifications and resetting the health scan cursor.
+    - Preserve removal preparation requested through the remote interface during initialization.
+    - Vehicles and characters can use existing reinforced floors without a cached chunk mark; moved selection tooltips now refresh.
+    - Accept valid single-string allowed_effects on other mods' buildings without a startup error.
+    - Negative bonus values now clamp to zero, and empty tile lists no longer match a literal nil name.
+  Optimizations:
+    - Skip hidden beacons for zero bonuses and receivers that cannot use beacon effects; keep unchanged module inventories intact.
+    - Reuse selection render objects and limit chunk-empty checks to the first matching reinforced tile.
+    - Recover unused beacons during rebuilds instead of searching near every ordinary entity placement; avoid repeated full Beacon Rebalance scans after save loads.
+  Modding:
+    - Added prepare_for_removal to the stable-foundations remote interface.
+---------------------------------------------------------------------------------------------------
+Version: 1.6.1
+Date: 26. 08. 2026
+  Compatibility:
+    - Beacon Rebalance compatibility now detects the shared remote interface instead of a specific mod name, adding support for compatible continuations such as wret-beacon-rebalance2.
+    - Script-teleported and cloned entities now have their reinforcement and hidden bonus beacon state rebuilt at the destination.
+  Bugfixes:
+    - Fixed Beacon Rebalance recovery writing to the read-only LuaEntity.active property or reactivating machines disabled for unrelated reasons.
+    - Fixed cloned entities being ignored because the clone event destination field was read incorrectly.
+    - Fixed Stable Foundations replacing intentional zero values in every beacon prototype's effect profile.
+    - Fixed occupied vehicles and rails beneath rolling stock temporarily losing reinforcement eligibility.
+    - Fixed acid smoke cleanup running while the smoke cleanup setting was disabled.
+    - Fixed stale tooltip IDs and hidden bonus beacons accumulating after entity or mod lifecycle changes.
+---------------------------------------------------------------------------------------------------
 Version: 1.6.0
 Date: 27. 06. 2026
   Features:

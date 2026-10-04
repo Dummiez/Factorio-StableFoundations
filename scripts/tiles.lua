@@ -3,6 +3,7 @@ return function(Shared, State)
 
 	local tileReinforcementCache = {}
 	local tilePatternMatchers = {}
+	local reinforcedTileNames
 
 	-- Lua-pattern magic chars that need escaping. `*` is NOT escaped so it can be
 	-- promoted to a wildcard in the user-pattern path below.
@@ -30,6 +31,7 @@ return function(Shared, State)
 	function Tiles.resetTileReinforcementCache()
 		tileReinforcementCache = {}
 		tilePatternMatchers = {}
+		reinforcedTileNames = nil
 
 		for index, tier in ipairs(Shared.SF_NAMES) do
 			for _, tileName in ipairs(tier) do
@@ -90,6 +92,14 @@ return function(Shared, State)
 		}
 	end
 
+	local function isAreaUniform(surface, left, top, right, bottom, expectedArea, tileName)
+		if expectedArea <= 0 then return false end
+		return surface.count_tiles_filtered {
+			area = { { left, top }, { right, bottom } },
+			name = tileName
+		} == expectedArea
+	end
+
 	function Tiles.isFootprintUniform(surface, entityBuilding, tileType, cheapPath)
 		if not tileType then return false end
 
@@ -98,20 +108,13 @@ return function(Shared, State)
 		end
 
 		local left, top, right, bottom, w, h = Tiles.getBoundingBox(entityBuilding)
-		local expectedArea = w * h
-		if expectedArea <= 0 then return false end
-
-		local tileCount = surface.count_tiles_filtered {
-			area = { { left, top }, { right, bottom } },
-			name = tileType.name
-		}
-		return tileCount == expectedArea
+		return isAreaUniform(surface, left, top, right, bottom, w * h, tileType.name)
 	end
 
 	function Tiles.getUniformReinforcedTile(surface, entityBuilding)
 		if not (surface and entityBuilding and entityBuilding.valid) then return nil end
 
-		local left, top, _, _, w, h = Tiles.getBoundingBox(entityBuilding)
+		local left, top, right, bottom, w, h = Tiles.getBoundingBox(entityBuilding)
 		if w <= 0 or h <= 0 then return nil end
 
 		if w == 1 and h == 1 then
@@ -127,7 +130,7 @@ return function(Shared, State)
 			return nil
 		end
 
-		return Tiles.isFootprintUniform(surface, entityBuilding, candidateTile, false) and candidateTile or nil
+		return isAreaUniform(surface, left, top, right, bottom, w * h, candidateTile.name) and candidateTile or nil
 	end
 
 	local function chunkKeyFor(position)
@@ -163,18 +166,23 @@ return function(Shared, State)
 	end
 
 	local function chunkStillHasReinforcement(surface, chunkX, chunkY)
+		if not reinforcedTileNames then
+			reinforcedTileNames = {}
+			for name in pairs(prototypes.tile) do
+				if Tiles.getTileReinforcement(name) then
+					reinforcedTileNames[#reinforcedTileNames + 1] = name
+				end
+			end
+		end
 		local tilesInChunk = surface.find_tiles_filtered({
 			area = {
 				{ chunkX * 32,      chunkY * 32 },
 				{ chunkX * 32 + 32, chunkY * 32 + 32 }
-			}
+			},
+			name = reinforcedTileNames,
+			limit = 1
 		})
-		for _, tile in pairs(tilesInChunk) do
-			if Tiles.getTileReinforcement(tile.name) then
-				return true
-			end
-		end
-		return false
+		return #tilesInChunk > 0
 	end
 
 	function Tiles.unmarkChunkIfEmpty(surface, position)

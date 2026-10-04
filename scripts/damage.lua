@@ -6,9 +6,12 @@ return function(Shared, State, Tiles, Invulnerability, Reinforcement)
 	local SMOKE_CLEANUP_COOLDOWN_TICKS = 60
 	local MAX_SMOKE_ENTITIES = 3
 	local MAX_SMOKE_RADIUS = 5
+	local COVERAGE_CHECK_INTERVAL = 60
 
-	local damageIndicatorAvailable = false
-	local nextEntityIndex = nil
+	-- nil until first resolved. A joining client starts with nil, so a damage
+	-- event before its first tick resolves the same value the server holds
+	-- instead of silently skipping a notification the server sends.
+	local damageIndicatorAvailable = nil
 
 	function Damage.refreshDamageIndicatorAvailability()
 		local iface = remote.interfaces["damage-indicator"]
@@ -44,6 +47,7 @@ return function(Shared, State, Tiles, Invulnerability, Reinforcement)
 	end
 
 	local function notifyDamageIndicator(report)
+		if damageIndicatorAvailable == nil then Damage.refreshDamageIndicatorAvailability() end
 		if not damageIndicatorAvailable then return end
 		remote.call("damage-indicator", "record_stable_foundations_damage_reduction", report)
 	end
@@ -82,30 +86,48 @@ return function(Shared, State, Tiles, Invulnerability, Reinforcement)
 	end
 
 	function Damage.entityStructureDamaged(entityBuilding, attackingEntity, attackingForce, finalDamage, finalHealth, damageType)
-		if not (entityBuilding and entityBuilding.valid and finalDamage > 0 and entityBuilding.surface and entityBuilding.position) then return end
-		if not Tiles.isChunkReinforced(entityBuilding.surface, entityBuilding.position) then return end
-		if not Invulnerability.canReinforceBuilding(entityBuilding) then return end
+		if not (entityBuilding and entityBuilding.valid and finalDamage > 0) then return end
+		local entityUID = entityBuilding.unit_number
+		local entityData = entityUID and storage.sfEntity[entityUID]
+		-- With mobile protection disabled, only tracked structures can benefit.
+		-- Skip unrelated combat before exporting any prototype or position data.
+		if not entityData and not (Shared.SETTING.ReinforceUnits or Shared.SETTING.ReinforcePlayers) then return end
+		if not Invulnerability.canReinforceBuilding(entityBuilding) then
+			-- Keep observed, unprotected damage current if eligibility later changes.
+			Damage.syncEntityHealth(entityBuilding)
+			return
+		end
 
 		local tileRate = nil
-		local entityUID = entityBuilding.unit_number
 
 		if entityBuilding.prototype.is_building then
 			if not entityUID then return end
-			local entityData = storage.sfEntity[entityUID]
+			if not Tiles.isChunkReinforced(entityBuilding.surface, entityBuilding.position) then return end
 			tileRate = entityData and entityData.tileRate
 			if not tileRate then return end
 
-			-- Cheap drift check: weapons like atom bombs can clear the tile under a
-			-- building without firing any tile-mined event, leaving stale reinforcement
-			-- in storage. A single get_tile on the bounding-box corner catches the
-			-- common case (large blasts that destroy the whole footprint) without
-			-- running surface.count_tiles_filtered. Partial damage that leaves the
-			-- corner intact will be caught on a subsequent damage event.
-			local left, top = Tiles.getBoundingBox(entityBuilding)
-			local cornerTile = entityBuilding.surface.get_tile(left, top)
-			if not (cornerTile and Tiles.getTileReinforcement(cornerTile.name)) then
-				Reinforcement.clearBuildingReinforcement(entityBuilding.surface, entityBuilding)
-				return
+			-- Check the complete footprint, bounded to once per second per damaged
+			-- building. A fixed corner can never detect a missing interior tile.
+			local lastCheck = storage.sfCoverageCheckTick[entityUID]
+			if not lastCheck or game.tick - lastCheck >= COVERAGE_CHECK_INTERVAL then
+				storage.sfCoverageCheckTick[entityUID] = game.tick
+				local tile = Tiles.getUniformReinforcedTile(entityBuilding.surface, entityBuilding)
+				if not tile then
+					Reinforcement.clearBuildingReinforcement(entityBuilding.surface, entityBuilding)
+					return
+				end
+				local liveRate = Tiles.getTileReinforcement(tile.name)
+				if not Shared.sameTileReinforcement(liveRate, tileRate) then
+					Reinforcement.entityStructureReinforced(
+						{ surface = entityBuilding.surface, force = entityBuilding.force }, nil, entityBuilding, true
+					)
+					tileRate = liveRate
+				elseif liveRate ~= tileRate then
+					-- Saved rate tables and freshly loaded settings have different
+					-- identities even when their values match. Adopt the cached table
+					-- without rebuilding tooltips and bonus beacons on the first hit.
+					entityData.tileRate = liveRate
+				end
 			end
 		else
 			local buildTileType = entityBuilding.surface.get_tile(entityBuilding.position)
@@ -129,16 +151,8 @@ return function(Shared, State, Tiles, Invulnerability, Reinforcement)
 			storage.sfHealthEntities[entityUID] = entityBuilding
 		end
 
-		if not storage.sfHealth[entityUID] then
-			if finalHealth > 0 then
-				storage.sfHealth[entityUID] = finalHealth + finalDamage
-			else
-				storage.sfHealth[entityUID] = entityBuilding.max_health
-			end
-		end
-
 		Invulnerability.toggleInvulnerabilities(entityBuilding, false)
-		if Shared.SETTING.SmokeCleanupEnabled and damageType == "poison" or damageType == "acid" then
+		if Shared.SETTING.SmokeCleanupEnabled and (damageType == "poison" or damageType == "acid") then
 			-- Per-entity throttle: poison ticks fire every few ticks per cloud, so without
 			-- this every hit triggers a radius-5 find_entities_filtered. Capped at one scan
 			-- per entity per cooldown window.
@@ -170,7 +184,7 @@ return function(Shared, State, Tiles, Invulnerability, Reinforcement)
 		local qualityReducePercent = getQualityDamageReduction(entityBuilding)
 		local totalReducePercent = tileReducePercent + qualityReducePercent
 
-		if (attackingForce == entityBuilding.force) and attackingEntity then
+		if attackingForce == entityBuilding.force then
 			if not Shared.SETTING.FriendlyDamageReduction then
 				tileReduceFlat = 0
 				totalReducePercent = 0
@@ -187,14 +201,21 @@ return function(Shared, State, Tiles, Invulnerability, Reinforcement)
 		local finalFlatDamage = (finalDamage - tileReduceFlat) > 0 and (finalDamage - tileReduceFlat) or
 			1 / (tileReduceFlat - finalDamage + 2)
 		local mitigatedDamage = (finalFlatDamage * effectReduce) * (1 - (totalReducePercent / 100))
-		recordDamageReductionReport(entityBuilding, finalDamage, mitigatedDamage, damageType)
-
-		local preHealth = storage.sfHealth[entityUID]
-		local updatedHealth = preHealth - mitigatedDamage
+		-- Ordinary hits expose their pre-hit health, avoiding stale repair data.
+		-- Overkill clamps final_health to zero, so only that case needs the last
+		-- observed health (or full health if no damaged-health record exists).
+		-- Bound that estimate by the raw hit: a hit with no reduction cannot revive
+		-- an entity. Include additive health changes from earlier event handlers.
+		local maxHealth = entityBuilding.max_health
+		local preHealth = finalDamage
+		if finalHealth <= 0 and mitigatedDamage < finalDamage then
+			preHealth = math.min(maxHealth, finalDamage, storage.sfHealth[entityUID] or maxHealth)
+		end
+		local updatedHealth = math.min(maxHealth, entityBuilding.health + preHealth - mitigatedDamage)
 
 		if updatedHealth > 0 then
 			entityBuilding.health = updatedHealth
-			if updatedHealth >= entityBuilding.max_health then
+			if updatedHealth >= maxHealth then
 				State.clearHealthTracking(entityUID)
 			else
 				storage.sfHealth[entityUID] = updatedHealth
@@ -203,6 +224,7 @@ return function(Shared, State, Tiles, Invulnerability, Reinforcement)
 			entityBuilding.health = 0
 			State.clearHealthTracking(entityUID)
 		end
+		recordDamageReductionReport(entityBuilding, finalDamage, mitigatedDamage, damageType)
 	end
 
 	function Damage.periodicEntityCheck()
@@ -212,7 +234,9 @@ return function(Shared, State, Tiles, Invulnerability, Reinforcement)
 		end
 
 		local count = 0
-		local currentIndex = nextEntityIndex
+		-- A local cursor resets on a joining multiplayer client, causing peers
+		-- to update different saved entries. Persist it with the tracked state.
+		local currentIndex = storage.sfHealthCursor
 		local entitiesToRemove = {}
 
 		if currentIndex and not storage.sfHealth[currentIndex] then
@@ -223,7 +247,6 @@ return function(Shared, State, Tiles, Invulnerability, Reinforcement)
 			local storedHealth
 			currentIndex, storedHealth = next(storage.sfHealth, currentIndex)
 			if not currentIndex then
-				nextEntityIndex = nil
 				break
 			end
 
@@ -249,9 +272,7 @@ return function(Shared, State, Tiles, Invulnerability, Reinforcement)
 			count = count + 1
 		end
 
-		if currentIndex then
-			nextEntityIndex = currentIndex
-		end
+		storage.sfHealthCursor = currentIndex
 
 		for _, entityUID in ipairs(entitiesToRemove) do
 			State.clearHealthTracking(entityUID)
@@ -260,24 +281,31 @@ return function(Shared, State, Tiles, Invulnerability, Reinforcement)
 		Damage.cleanupDamageReports(game.tick)
 	end
 
-	function Damage.handlePlayerRepairedEntity(event)
-		local entity = event.entity
-		if not (entity and entity.valid and entity.unit_number and storage.sfHealth) then return end
+	function Damage.syncEntityHealth(entity)
+		if storage.sfRemovalPrepared then return false end
+		if not (entity and entity.valid and entity.unit_number and storage.sfHealth) then return false end
 
 		local uid = entity.unit_number
-		if not storage.sfHealth[uid] then return end
+		if not (storage.sfEntity[uid] or storage.sfHealthEntities[uid]) then return false end
+		local health = entity.health
+		local maxHealth = entity.max_health
+		-- During a clamped damage event zero health is already too late to observe
+		-- the pre-hit value. Do not discard the fallback in a nested remote call.
+		if not health or not maxHealth or health <= 0 then return false end
+		if health >= maxHealth then
+			State.clearHealthTracking(uid)
+			return true
+		end
 		storage.sfHealthEntities = storage.sfHealthEntities or {}
 		if not (storage.sfEntity and storage.sfEntity[uid]) then
 			storage.sfHealthEntities[uid] = entity
 		end
+		storage.sfHealth[uid] = health
+		return true
+	end
 
-		local health = entity.health
-		local maxHealth = entity.max_health
-		if not health or not maxHealth or health <= 0 or health >= maxHealth then
-			State.clearHealthTracking(uid)
-		else
-			storage.sfHealth[uid] = health
-		end
+	function Damage.handlePlayerRepairedEntity(event)
+		Damage.syncEntityHealth(event.entity)
 	end
 
 	function Damage.makeRemoteInterface()
@@ -285,6 +313,7 @@ return function(Shared, State, Tiles, Invulnerability, Reinforcement)
 			version = function()
 				return 1
 			end,
+			sync_entity_health = Damage.syncEntityHealth,
 			get_damage_reduction_report = function(entity, tick)
 				if not (entity and entity.valid) then
 					return nil

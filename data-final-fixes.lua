@@ -56,25 +56,15 @@ if mods["space-exploration"] then
 	tile_beacon.se_allow_productivity_in_space = true
 end
 
--- Beacon overload mod compatibility: several mods (Space Exploration, Beacon
--- Rebalance, etc.) use profile = {1, 0} to make the second beacon provide no
--- effect. Our hidden sf-tile-bonus beacon should not consume that profile slot.
--- In SE games, make each beacon pick profile samples from its own prototype
--- count instead of the total beacon count. SE's runtime overload validator still
--- counts all real beacons and disables overloaded receivers; Stable Foundations
--- separately asks SE to ignore only sf-tile-bonus.
+-- Space Exploration uses cross-prototype beacon overload rules. Keep each
+-- beacon's profile count scoped to its own prototype so the hidden tile beacon
+-- does not consume a real beacon's profile slot. SE's runtime overload validator
+-- still counts real beacons; Stable Foundations separately asks it to ignore
+-- only sf-tile-bonus.
 if data.raw["beacon"] then
 	for _, beacon_proto in pairs(data.raw["beacon"]) do
 		if mods["space-exploration"] then
 			beacon_proto.beacon_counter = "same_type"
-		end
-
-		if beacon_proto.profile then
-			for i = 1, #beacon_proto.profile do
-				if beacon_proto.profile[i] == 0 then
-					beacon_proto.profile[i] = 1
-				end
-			end
 		end
 	end
 end
@@ -128,6 +118,10 @@ if Shared.SETTING.BuildingBonusEffects then
 		-- Helper function to update allowed effects on a data object
 		local function updateAllowedEffects(dataObject, effect)
 			dataObject.allowed_effects = dataObject.allowed_effects or {}
+			-- Factorio also accepts a single effect as a string.
+			if type(dataObject.allowed_effects) == "string" then
+				dataObject.allowed_effects = { dataObject.allowed_effects }
+			end
 
 			if dataObject.effect_receiver then
 				dataObject.effect_receiver.uses_module_effects = true

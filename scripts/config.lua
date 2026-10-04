@@ -1,38 +1,22 @@
 local Config = {}
 
-function Config.loadGameConfigs()
-	-- Mod support for Beacon Rebalance
-	if script.active_mods["wret-beacon-rebalance-mod"]
-		and settings.startup["wret-overload-disable-overloaded"].value == true
-		and remote.interfaces["wr-beacon-rebalance"] then
+function Config.loadGameConfigs(revalidate)
+	-- Support any Beacon Rebalance continuation that implements the same remote
+	-- interface instead of coupling compatibility to a specific mod name.
+	local beaconRebalance = remote.interfaces["wr-beacon-rebalance"]
+	local overloadSetting = settings.startup["wret-overload-disable-overloaded"]
+	if beaconRebalance
+		and beaconRebalance["add_whitelisted_beacon"]
+		and overloadSetting
+		and overloadSetting.value == true then
 		remote.call("wr-beacon-rebalance", "add_whitelisted_beacon", "sf-tile-bonus")
 
-		-- Rebalance keeps its whitelist in a Lua local that resets every script
-		-- load. Receivers that got stuck overloaded during the previous session
-		-- (when our hidden beacon was wrongly counted) won't auto-recover, so
-		-- walk tracked foundation receivers and re-enable any whose real beacon
-		-- count is <= 1 now that the whitelist is restored. reset_beacons is
-		-- not enough — it only re-runs the disable path, never the enable.
-		if storage.bonusBeacons then
-			for uid, bonusBeacon in pairs(storage.bonusBeacons) do
-				local entry = storage.sfEntity and storage.sfEntity[uid]
-				local receiver = entry and entry.entity
-				if receiver and receiver.valid and receiver.active == false
-					and receiver.get_beacons then
-					local realBeaconCount = 0
-					local beacons = receiver.get_beacons()
-					if beacons then
-						for _, beacon in pairs(beacons) do
-							if beacon.valid and beacon.name ~= "sf-tile-bonus" then
-								realBeaconCount = realBeaconCount + 1
-							end
-						end
-					end
-					if realBeaconCount <= 1 then
-						receiver.active = true
-					end
-				end
-			end
+		-- Only the overload mod knows which disables it owns. Let its API
+		-- revalidate receivers instead of clearing arbitrary script disables.
+		-- Revalidate only during init/configuration changes; a joining client's
+		-- first tick must not perform world mutations absent on the server.
+		if revalidate and beaconRebalance.reset_beacons then
+			remote.call("wr-beacon-rebalance", "reset_beacons")
 		end
 	end
 end

@@ -7,13 +7,19 @@ function Shared.clamp(x, min, max)
 	return x < min and min or (x > max and max or x)
 end
 
+function Shared.sameTileReinforcement(a, b)
+	return a == b or (a and b
+		and a.tier == b.tier and a.percent == b.percent and a.flat == b.flat
+		and a.productivity == b.productivity and a.efficiency == b.efficiency and a.speed == b.speed)
+end
+
 -- Parse the bonus production value strings
 function Shared.parseBonus(bonusSetting, tierIndex)
 	local numbers = {}
 	local source = bonusSetting.value
 
 	-- Find all numbers in the string (including those with decimals)
-	for num in tostring(source):gmatch("[%d%.]+") do
+	for num in tostring(source):gmatch("[+-]?[%d%.]+") do
 		local value = tonumber(num)
 		if value then
 			table.insert(numbers, Shared.clamp(math.floor(value + 0.5), 0, 200))
@@ -21,7 +27,7 @@ function Shared.parseBonus(bonusSetting, tierIndex)
 	end
 
 	if #numbers == 0 then
-		for num in tostring(bonusSetting.default_value):gmatch("[%d%.]+") do
+		for num in tostring(bonusSetting.default_value):gmatch("[+-]?[%d%.]+") do
 			local value = tonumber(num)
 			if value then
 				table.insert(numbers, Shared.clamp(math.floor(value + 0.5), 0, 200))
@@ -41,6 +47,7 @@ function Shared.parseTiles(tileSetting)
 	if not source or source:match('^%s*$') then
 		source = tileSetting.default_value
 	end
+	if not source then return tiles end
 
 	-- Find all words separated by commas
 	for tile in tostring(source):gmatch('([^,]+)') do

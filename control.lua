@@ -18,33 +18,115 @@ local Reinforcement = require("scripts.reinforcement")(
 	Indicators
 )
 local Damage = require("scripts.damage")(Shared, State, Tiles, Invulnerability, Reinforcement)
+local Removal = require("scripts.removal")(State, Invulnerability, Indicators)
 
 local SF_INDICATOR_REFRESH_TICKS = 30
 
-remote.add_interface("stable-foundations", Damage.makeRemoteInterface())
+local function rebuildExistingReinforcement()
+	storage.reinforcedChunks = {}
+	storage.sfCoverageCheckTick = {}
+	BuildingBonus.recoverOrphanBeacons()
+	-- Reuse the tooltip recovery scan to cover factories already in the save.
+	Indicators.recoverEntityTooltips(function(entity)
+		Reinforcement.entityStructureReinforced(
+			{ surface = entity.surface, force = entity.force }, nil, entity, true
+		)
+	end)
+end
+
+local function onActiveEvent(event, handler, filters)
+	script.on_event(event, function(...)
+		if storage.sfRemovalPrepared then return end
+		-- Another mod can raise an event during configuration changes before
+		-- our handler initializes newly added tracking maps.
+		if not storage.sfRegisteredEntities then State.initGlobalProperties() end
+		return handler(...)
+	end, filters)
+end
+
+local function onActiveNthTick(interval, handler)
+	script.on_nth_tick(interval, function(...)
+		if not storage.sfRemovalPrepared then return handler(...) end
+	end)
+end
+
+local remoteInterface = Damage.makeRemoteInterface()
+remoteInterface.prepare_for_removal = Removal.prepareForRemoval
+remote.add_interface("stable-foundations", remoteInterface)
+
+commands.add_command("stable-foundations-prepare-removal", { "sf-mod.prepare-removal-help" }, function(event)
+	local player = event.player_index and game.get_player(event.player_index)
+	if player and game.is_multiplayer() and not player.admin then
+		player.print({ "sf-mod.prepare-removal-admin" })
+		return
+	end
+	local result = Removal.prepareForRemoval()
+	game.print({ "sf-mod.removal-complete", result.tooltip_fields, result.bonus_beacons, result.invulnerability_overrides })
+end)
 
 -- loadGameConfigs and refreshDamageIndicatorAvailability are NOT registered in on_load
 -- because remote.call and remote.interfaces lookups from on_load are not multiplayer-safe.
--- They run from on_init (new save) and on_configuration_changed (mod added/removed/changed).
+-- Refresh on init/configuration changes and the first runtime tick after load.
 script.on_init(function()
 	State.initGlobalProperties()
-	Config.loadGameConfigs()
+	if storage.sfRemovalPrepared then return end
+	Config.loadGameConfigs(true)
+	rebuildExistingReinforcement()
 	Damage.refreshDamageIndicatorAvailability()
 end)
 
 -- Resolves the acting user across all build sources, including
 -- script-raised events and cloning which carry no player/robot.
+local function getBuiltEntity(event)
+	return event.destination or event.entity
+end
+
 local function handleEntityBuilt(event)
-	local entity = event.destination_entity or event.entity
+	local entity = getBuiltEntity(event)
 
 	if not (entity and entity.valid) then return end
+
+	-- Area/entity cloning also clones our hidden bonus beacon. Discard that copy;
+	-- the destination receiver's build event creates and tracks exactly one.
+	if event.source and entity.name == "sf-tile-bonus" then
+		entity.destroy()
+		return
+	end
+	if event.source and event.source.valid then
+		Invulnerability.inheritSafeOverride(event.source.unit_number, entity)
+	end
 
 	local user = (event.player_index and game.players[event.player_index])
 		or event.robot
 		or { surface = entity.surface, force = entity.force }
 
-	Reinforcement.queuePostBuildRecheck(entity)
 	Reinforcement.entityStructureReinforced(user, nil, entity)
+	Reinforcement.queuePostBuildRecheck(entity)
+end
+
+onActiveEvent(defines.events.on_chunk_deleted, function(event)
+	local chunks = storage.reinforcedChunks[event.surface_index]
+	if chunks then
+		for _, position in ipairs(event.positions) do
+			chunks[position.x .. "," .. position.y] = nil
+		end
+	end
+end)
+
+-- Destruction registrations also catch other mods calling destroy() without
+-- raising a build/remove event, which would otherwise strand bonus beacons.
+onActiveEvent(defines.events.on_object_destroyed, function(event)
+	local uid = event.useful_id
+	if storage.sfRegisteredEntities[uid] == event.registration_number then
+		BuildingBonus.destroyBonusBeacon(uid)
+		State.clearEntityTracking(uid)
+	end
+end)
+
+for _, eventName in ipairs({ "on_surface_deleted", "on_surface_cleared" }) do
+	onActiveEvent(defines.events[eventName], function(event)
+		storage.reinforcedChunks[event.surface_index] = nil
+	end)
 end
 
 -- Space Exploration compatibility: when a real beacon is placed, SE validates
@@ -84,7 +166,7 @@ local function handleEntityBuiltDispatch(event)
 	-- Also fire SE re-validation for nearby foundation receivers when the new
 	-- entity is itself a real beacon. Done in the same dispatcher because
 	-- script.on_event only allows one handler per event per mod.
-	local entity = event.destination_entity or event.entity
+	local entity = getBuiltEntity(event)
 	if entity and entity.valid and entity.type == "beacon" then
 		handleBeaconBuilt(entity)
 	end
@@ -99,7 +181,7 @@ for _, eventName in pairs({
 	"script_raised_revive",
 }) do
 	if defines.events[eventName] then
-		script.on_event(defines.events[eventName], handleEntityBuiltDispatch)
+		onActiveEvent(defines.events[eventName], handleEntityBuiltDispatch)
 	end
 end
 
@@ -160,23 +242,23 @@ for _, eventName in pairs({
 	"script_raised_destroy",
 }) do
 	if defines.events[eventName] then
-		script.on_event(defines.events[eventName], handleEntityRemovedDispatch)
+		onActiveEvent(defines.events[eventName], handleEntityRemovedDispatch)
 	end
 end
 
-script.on_event(defines.events.on_selected_entity_changed, function(event)
+onActiveEvent(defines.events.on_selected_entity_changed, function(event)
 	Indicators.updateSelectionIndicator(game.players[event.player_index])
 end)
 
-script.on_event(defines.events.on_player_toggled_alt_mode, function(event)
+onActiveEvent(defines.events.on_player_toggled_alt_mode, function(event)
 	Indicators.updateSelectionIndicator(game.players[event.player_index])
 end)
 
-script.on_event(defines.events.on_player_left_game, function(event)
+onActiveEvent(defines.events.on_player_left_game, function(event)
 	Indicators.clearSelectionIndicator(event.player_index)
 end)
 
-script.on_event(defines.events.on_entity_damaged, function(event)
+onActiveEvent(defines.events.on_entity_damaged, function(event)
 	Damage.entityStructureDamaged(
 		event.entity,
 		event.cause,
@@ -189,7 +271,7 @@ end, {
 	{ filter = "final-damage-amount", comparison = ">", value = 0 }
 })
 
-script.on_event(defines.events.on_player_repaired_entity, Damage.handlePlayerRepairedEntity)
+onActiveEvent(defines.events.on_player_repaired_entity, Damage.handlePlayerRepairedEntity)
 
 local function applyTileBuilt(surface, user, event)
 	if surface and event.tile and Tiles.getTileReinforcement(event.tile.name) then
@@ -199,9 +281,17 @@ local function applyTileBuilt(surface, user, event)
 	Reinforcement.entityStructureReinforced(user, event.tiles, event.tile)
 end
 
+-- Use the event's surface: a player in remote view or the map editor can change
+-- tiles on a surface other than the one their character stands on.
+local function makeTileUser(event)
+	local actor = (event.player_index and game.players[event.player_index]) or event.robot
+	local surface = game.surfaces[event.surface_index]
+	if not (actor and surface) then return nil, surface end
+	return { surface = surface, force = actor.force }, surface
+end
+
 local function handleTileBuilt(event)
-	local user = (event.player_index and game.players[event.player_index]) or event.robot
-	local surface = user and user.surface
+	local user, surface = makeTileUser(event)
 
 	applyTileBuilt(surface, user, event)
 end
@@ -210,7 +300,7 @@ for _, eventName in pairs({
 	"on_player_built_tile",
 	"on_robot_built_tile",
 }) do
-	script.on_event(defines.events[eventName], handleTileBuilt)
+	onActiveEvent(defines.events[eventName], handleTileBuilt)
 end
 
 local function applyTileMined(surface, user, event)
@@ -222,8 +312,7 @@ local function applyTileMined(surface, user, event)
 end
 
 local function handleTileMined(event)
-	local user = (event.player_index and game.players[event.player_index]) or event.robot
-	local surface = user and user.surface
+	local user, surface = makeTileUser(event)
 
 	applyTileMined(surface, user, event)
 end
@@ -232,7 +321,7 @@ for _, eventName in pairs({
 	"on_player_mined_tile",
 	"on_robot_mined_tile",
 }) do
-	script.on_event(defines.events[eventName], handleTileMined)
+	onActiveEvent(defines.events[eventName], handleTileMined)
 end
 
 local function makePlatformUser(event, surface)
@@ -256,16 +345,16 @@ local function handlePlatformTileMined(event)
 end
 
 if defines.events.on_space_platform_built_tile then
-	script.on_event(defines.events.on_space_platform_built_tile, handlePlatformTileBuilt)
+	onActiveEvent(defines.events.on_space_platform_built_tile, handlePlatformTileBuilt)
 end
 
 if defines.events.on_space_platform_mined_tile then
-	script.on_event(defines.events.on_space_platform_mined_tile, handlePlatformTileMined)
+	onActiveEvent(defines.events.on_space_platform_mined_tile, handlePlatformTileMined)
 end
 
-script.on_event(defines.events.script_raised_set_tiles, Reinforcement.handleScriptSetTiles)
+onActiveEvent(defines.events.script_raised_set_tiles, Reinforcement.handleScriptSetTiles)
 
-script.on_event(defines.events.on_player_rotated_entity, function(event)
+onActiveEvent(defines.events.on_player_rotated_entity, function(event)
 	local entity = event.entity
 	if not (entity and entity.valid) then return end
 	Reinforcement.entityStructureReinforced(
@@ -275,16 +364,40 @@ script.on_event(defines.events.on_player_rotated_entity, function(event)
 	)
 end)
 
+if defines.events.script_raised_teleported then
+	onActiveEvent(defines.events.script_raised_teleported, function(event)
+		local entity = event.entity
+		if not (entity and entity.valid and entity.unit_number) then return end
+		if entity.name == "sf-tile-bonus" then return end
+
+		-- The tracked hidden beacon does not move with its receiver. Remove it at
+		-- the old position, then re-evaluate reinforcement at the destination.
+		BuildingBonus.destroyBonusBeacon(entity.unit_number)
+		if Invulnerability.canReinforceBuilding(entity, true) then
+			Reinforcement.entityStructureReinforced(
+				{ surface = entity.surface, force = entity.force },
+				nil,
+				entity
+			)
+		else
+			Invulnerability.toggleInvulnerabilities(entity, true)
+			Indicators.clearEntityTooltipBonus(entity)
+			State.clearEntityTracking(entity.unit_number)
+			Indicators.refreshSelectionIndicatorsForEntity(entity, false)
+		end
+	end)
+end
+
 -- Factorio allows one on_nth_tick handler per interval per mod, so merge the
 -- handlers when the user setting happens to equal the indicator refresh rate.
 if Shared.SETTING.EntityTickRefresh == SF_INDICATOR_REFRESH_TICKS then
-	script.on_nth_tick(SF_INDICATOR_REFRESH_TICKS, function()
+	onActiveNthTick(SF_INDICATOR_REFRESH_TICKS, function()
 		Damage.periodicEntityCheck()
 		Indicators.refreshMovableSelectionIndicators()
 	end)
 else
-	script.on_nth_tick(Shared.SETTING.EntityTickRefresh, Damage.periodicEntityCheck)
-	script.on_nth_tick(SF_INDICATOR_REFRESH_TICKS, Indicators.refreshMovableSelectionIndicators)
+	onActiveNthTick(Shared.SETTING.EntityTickRefresh, Damage.periodicEntityCheck)
+	onActiveNthTick(SF_INDICATOR_REFRESH_TICKS, Indicators.refreshMovableSelectionIndicators)
 end
 
 -- Per-tick cross-mod compatibility work. Two responsibilities:
@@ -296,68 +409,56 @@ end
 --      clear the overload state when a real beacon is removed nearby.
 --      We do this on the first tick (not on_load) because remote.call is not
 --      multiplayer-safe from on_load.
--- The handler is only registered when at least one of those mods is present.
+-- Register the handler unconditionally so a Beacon Rebalance continuation can
+-- be discovered by its remote interface after every mod has loaded control.lua.
+-- Keep it registered even without SE: multiplayer clients must restore the same
+-- event subscriptions that the server had when it saved their joining map.
 -- sfFirstTickDone is a module-local (not storage) so it resets on every script
 -- load — exactly what we need to mirror rebalance's local-whitelist reset.
 local sfFirstTickDone = false
+-- active_mods is fixed for a loaded session, so read it once instead of per tick.
+local seActive = script.active_mods["space-exploration"] ~= nil
 
-local function hasRelevantBeaconMod()
-	return script.active_mods["space-exploration"]
-		or script.active_mods["wret-beacon-rebalance-mod"]
-end
+onActiveEvent(defines.events.on_tick, function()
+	if not sfFirstTickDone then
+		Config.loadGameConfigs()
+		Damage.refreshDamageIndicatorAvailability()
+		sfFirstTickDone = true
+	end
 
-if hasRelevantBeaconMod() then
-	script.on_event(defines.events.on_tick, function()
-		if not sfFirstTickDone then
-			Config.loadGameConfigs()
-			sfFirstTickDone = true
-		end
-		Reinforcement.processPostBuildRecheckQueue()
-		BuildingBonus.processSeReNotifyQueue()
-	end)
-end
+	if not seActive then
+		return
+	end
+
+	Reinforcement.processPostBuildRecheckQueue()
+	BuildingBonus.processSeReNotifyQueue()
+end)
 
 script.on_configuration_changed(function(configChange)
+	State.initGlobalProperties()
+	if storage.sfRemovalPrepared then return end
+
 	-- Re-resolve cross-mod state on every configuration change. Other mods may have
 	-- been added/removed/updated even if StableFoundations itself didn't change.
-	Config.loadGameConfigs()
+	Config.loadGameConfigs(true)
 	Damage.refreshDamageIndicatorAvailability()
+	Tiles.resetTileReinforcementCache()
+	Invulnerability.resetCache()
+	local bonusReceiversToRepair = BuildingBonus.cleanupInvalidBonusBeacons()
+	State.pruneInvalidEntityReferences()
 
 	local changes = configChange.mod_changes and configChange.mod_changes["StableFoundations"]
-	if not (changes or configChange.mod_startup_settings_changed or configChange.migration_applied) then return end
-
-	State.initGlobalProperties()
-
-	if storage.sfHealth then
-		for uid, value in pairs(storage.sfHealth) do
-			if type(value) ~= "number" then
-				State.clearHealthTracking(uid)
+	if not (changes or configChange.mod_startup_settings_changed or configChange.migration_applied) then
+		for _, entity in ipairs(bonusReceiversToRepair) do
+			if entity.valid and storage.sfEntity[entity.unit_number] then
+				Reinforcement.entityStructureReinforced(
+					{ surface = entity.surface, force = entity.force },
+					nil,
+					entity
+				)
 			end
 		end
-	end
-
-	if storage.sfHealthEntities then
-		for uid, entity in pairs(storage.sfHealthEntities) do
-			if not storage.sfHealth[uid] or not entity or not entity.valid then
-				storage.sfHealthEntities[uid] = nil
-			end
-		end
-	end
-
-	if storage.sfEntity then
-		for uid, value in pairs(storage.sfEntity) do
-			if type(value) ~= "table" or not value.entity or not value.tileRate then
-				storage.sfEntity[uid] = nil
-			end
-		end
-	end
-
-	if storage.sfDestructibleState then
-		for uid, value in pairs(storage.sfDestructibleState) do
-			if type(value) ~= "table" or not value.entity or not value.entity.valid then
-				storage.sfDestructibleState[uid] = nil
-			end
-		end
+		return
 	end
 
 	if storage.sfDamageReports then
@@ -366,7 +467,11 @@ script.on_configuration_changed(function(configChange)
 
 	-- Migration for saves created before Stable Foundations tracked ownership
 	-- of safe invulnerability overrides.
-	if storage.sfEntity then
+	local oldVersion = changes and changes.old_version
+	local major, minor, patch = string.match(oldVersion or "", "^(%d+)%.(%d+)%.(%d+)$")
+	major, minor, patch = tonumber(major), tonumber(minor), tonumber(patch)
+	local needsLegacyOwnership = major and (major < 1 or (major == 1 and (minor < 6 or (minor == 6 and patch < 1))))
+	if needsLegacyOwnership and storage.sfEntity then
 		for uid, value in pairs(storage.sfEntity) do
 			local entity = value.entity
 			if entity and entity.valid and not entity.destructible
@@ -380,34 +485,8 @@ script.on_configuration_changed(function(configChange)
 		end
 	end
 
-	Tiles.resetTileReinforcementCache()
-	Invulnerability.resetCache()
-
-	-- Reconnect orphan beacons before re-applying bonuses so we adopt existing
-	-- beacons instead of creating duplicates next to them.
-	BuildingBonus.recoverOrphanBeacons()
-
-	if storage.sfEntity then
-		for uid, entry in pairs(storage.sfEntity) do
-			local entity = entry.entity
-			if entity and entity.valid then
-				local reinforcedTile = Tiles.getUniformReinforcedTile(entity.surface, entity)
-				if reinforcedTile then
-					local tileRate = Tiles.getTileReinforcement(reinforcedTile.name)
-					if tileRate then
-						entry.tileRate = tileRate
-						BuildingBonus.applyBuildingBonus(entity.surface, entity, reinforcedTile)
-					else
-						Reinforcement.clearBuildingReinforcement(entity.surface, entity)
-					end
-				else
-					Reinforcement.clearBuildingReinforcement(entity.surface, entity)
-				end
-			else
-				storage.sfEntity[uid] = nil
-			end
-		end
-	end
+	-- Addition already performed this scan in on_init.
+	if not (changes and not changes.old_version) then rebuildExistingReinforcement() end
 
 	for _, player in pairs(game.connected_players) do
 		Indicators.updateSelectionIndicator(player)

@@ -15,7 +15,7 @@ return function(Shared, State, Tiles, Invulnerability, BuildingBonus, Indicators
 	-- surface.count_tiles_filtered for every multi-tile reinforced entity each
 	-- cycle, which becomes costly on large bases.
 
-	local function getMatchingBuilding(entityUser, entityBuilding, tileType)
+	local function getMatchingBuilding(entityUser, entityBuilding, tileType, suppressPopup)
 		if not entityUser or not entityBuilding or not entityBuilding.valid or not tileType then return end
 		if not (Invulnerability.canReinforceBuilding(entityBuilding, true) and entityBuilding.force == entityUser.force) then return end
 
@@ -24,18 +24,24 @@ return function(Shared, State, Tiles, Invulnerability, BuildingBonus, Indicators
 
 		local uid = entityBuilding.unit_number
 		local existing = storage.sfEntity[uid]
-		local isNewReinforcement = not existing or (existing.tileRate ~= tileRate)
+		local isNewReinforcement = not existing or not Shared.sameTileReinforcement(existing.tileRate, tileRate)
 
 		storage.sfEntity[uid] = { entity = entityBuilding, tileRate = tileRate }
-		if entityBuilding.health > 0 and entityBuilding.health ~= entityBuilding.max_health then
-			storage.sfHealth[uid] = entityBuilding.health
+		State.registerEntity(entityBuilding)
+		if entityBuilding.health > 0 then
+			if entityBuilding.health < entityBuilding.max_health then
+				storage.sfHealth[uid] = entityBuilding.health
+			else
+				State.clearHealthTracking(uid)
+			end
 		end
-		Indicators.refreshSelectionIndicatorsForEntity(entityBuilding)
 
 		Tiles.markChunkReinforced(entityBuilding.surface, entityBuilding.position)
 		local invCaption = Invulnerability.toggleInvulnerabilities(entityBuilding, false)
+		local isInvulnerable = Invulnerability.isOwnedSafeOverride(entityBuilding)
+		Indicators.refreshSelectionIndicatorsForEntity(entityBuilding, isInvulnerable)
 
-		if isNewReinforcement then
+		if isNewReinforcement and not suppressPopup then
 			local qualityLevel = entityBuilding.quality and entityBuilding.quality.level or 0
 			local displayPercent = tileRate.percent + (qualityLevel * Shared.SETTING.ReinforceQuality)
 			if displayPercent > Shared.SETTING.MaxReductionPercent then
@@ -90,18 +96,10 @@ return function(Shared, State, Tiles, Invulnerability, BuildingBonus, Indicators
 		return false
 	end
 
-	local function reactivateSwappedEntity(entity)
-		entity.disabled_by_script = false -- previously entity.active
-		pcall(function()
-			if entity.disabled_by_script then
-				entity.disabled_by_script = false
-			end
-		end)
-	end
-
 	function Reinforcement.queuePostBuildRecheck(entity)
 		if not mayBeSpaceExplorationSwapCandidate(entity) then return end
 		if not storage.sfPostBuildRecheckQueue then State.initGlobalProperties() end
+		local safeState = Invulnerability.isOwnedSafeOverride(entity)
 
 		storage.sfPostBuildRecheckQueue[#storage.sfPostBuildRecheckQueue + 1] = {
 			surface_index = entity.surface.index,
@@ -109,7 +107,9 @@ return function(Shared, State, Tiles, Invulnerability, BuildingBonus, Indicators
 			force_name = entity.force.name,
 			name = entity.name,
 			unit_number = entity.unit_number,
-			tick = game.tick
+			tick = game.tick,
+			-- Destruction callbacks can clear the original before the next tick.
+			safe_override = safeState and { destructible = safeState.destructible } or nil
 		}
 	end
 
@@ -145,11 +145,9 @@ return function(Shared, State, Tiles, Invulnerability, BuildingBonus, Indicators
 
 				if replacement and replacement.valid then
 					if entry.unit_number and replacement.unit_number ~= entry.unit_number then
+						Invulnerability.inheritSafeOverride(entry.unit_number, replacement, entry.safe_override)
 						State.clearEntityTracking(entry.unit_number)
-						local transferredBonus = BuildingBonus.transferBonusBeacon(entry.unit_number, replacement.unit_number)
-						if transferredBonus then
-							reactivateSwappedEntity(replacement)
-						end
+						BuildingBonus.transferBonusBeacon(entry.unit_number, replacement.unit_number)
 
 						Reinforcement.entityStructureReinforced(
 							{ surface = surface, force = replacement.force },
@@ -175,29 +173,36 @@ return function(Shared, State, Tiles, Invulnerability, BuildingBonus, Indicators
 		local pos = entityBuilding.position
 
 		Invulnerability.toggleInvulnerabilities(entityBuilding, true)
+		Indicators.clearEntityTooltipBonus(entityBuilding)
 		State.clearEntityTracking(entityBuilding.unit_number)
 		BuildingBonus.applyBuildingBonus(surface, entityBuilding, nil)
-		Indicators.refreshSelectionIndicatorsForEntity(entityBuilding)
-		Indicators.clearEntityTooltipBonus(entityBuilding)
-		
+		Indicators.refreshSelectionIndicatorsForEntity(entityBuilding, Invulnerability.isOwnedSafeOverride(entityBuilding))
+
 		Tiles.unmarkChunkIfEmpty(surface, pos)
 	end
 
-	function Reinforcement.entityStructureReinforced(entityUser, tileList, tileType)
+	function Reinforcement.entityStructureReinforced(entityUser, tileList, tileType, suppressPopup)
 		if not entityUser or not entityUser.surface then return end
 		local mainSurface = entityUser.surface
 
 		if tileList == nil then
 			local entityBuilding = tileType
-			if not Invulnerability.canReinforceBuilding(entityBuilding, true) then return end
+			if not (entityBuilding and entityBuilding.valid and entityBuilding.unit_number) then return end
+			if not Invulnerability.canReinforceBuilding(entityBuilding, true) then
+				if Invulnerability.isOwnedSafeOverride(entityBuilding) or storage.sfEntity[entityBuilding.unit_number] then
+					Reinforcement.clearBuildingReinforcement(mainSurface, entityBuilding)
+				end
+				return
+			end
 
 			local reinforcedTile = Tiles.getUniformReinforcedTile(mainSurface, entityBuilding)
 
 			if reinforcedTile then
-				getMatchingBuilding(entityUser, entityBuilding, reinforcedTile)
+				getMatchingBuilding(entityUser, entityBuilding, reinforcedTile, suppressPopup)
 				BuildingBonus.applyBuildingBonus(mainSurface, entityBuilding, reinforcedTile)
 			else
 				Reinforcement.clearBuildingReinforcement(mainSurface, entityBuilding)
+				Indicators.refreshSelectionIndicatorsForEntity(entityBuilding, false)
 			end
 			return
 		end
@@ -256,10 +261,11 @@ return function(Shared, State, Tiles, Invulnerability, BuildingBonus, Indicators
 			if entityBuilding.valid and Invulnerability.canReinforceBuilding(entityBuilding, true) then
 				local reinforcedTile = Tiles.getUniformReinforcedTile(mainSurface, entityBuilding)
 				if reinforcedTile then
-					getMatchingBuilding(entityUser, entityBuilding, reinforcedTile)
+					getMatchingBuilding(entityUser, entityBuilding, reinforcedTile, suppressPopup)
 					BuildingBonus.applyBuildingBonus(mainSurface, entityBuilding, reinforcedTile)
 				else
 					Reinforcement.clearBuildingReinforcement(mainSurface, entityBuilding)
+					Indicators.refreshSelectionIndicatorsForEntity(entityBuilding, false)
 				end
 			end
 		end
@@ -267,6 +273,7 @@ return function(Shared, State, Tiles, Invulnerability, BuildingBonus, Indicators
 
 	function Reinforcement.entityStructureDestroyed(entityBuilding)
 		if entityBuilding and entityBuilding.valid and entityBuilding.unit_number then
+			Indicators.clearEntityTooltipBonus(entityBuilding)
 			State.clearEntityTracking(entityBuilding.unit_number)
 			BuildingBonus.removeBuildingBonus(entityBuilding)
 		end
@@ -348,6 +355,7 @@ return function(Shared, State, Tiles, Invulnerability, BuildingBonus, Indicators
 					BuildingBonus.applyBuildingBonus(surface, entityBuilding, reinforcedTile)
 				else
 					Reinforcement.clearBuildingReinforcement(surface, entityBuilding)
+					Indicators.refreshSelectionIndicatorsForEntity(entityBuilding, false)
 				end
 			end
 		end

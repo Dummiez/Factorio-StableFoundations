@@ -3,11 +3,10 @@
 	"title": "Stable Foundations",
 	"description": "Buildings and other structures now have improved damage resistance, productivity, speed and efficiency when built over stone and concrete tiles. Can also be used to reinforce vehicles, robots and players as well as adjusting the additional foundation stats to your liking. Highly configurable/mod compatible.",
 	"author": "Dummiez",
-	"version": "1.6.0",
+	"version": "1.6.3",
 	"factorio_version": "2.1",
 	"dependencies": [
-		"base >= 2.1",
-		"? ConcreteInSpace >= 1.0.1",
-		"(?) wret-beacon-rebalance-mod"
+		"base >= 2.1.0",
+		"? ConcreteInSpace >= 1.0.1"
 	]
 }
